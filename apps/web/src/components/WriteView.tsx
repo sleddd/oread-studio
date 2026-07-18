@@ -42,7 +42,7 @@ export function WriteView(): JSX.Element {
               fontSize: 23,
               fontWeight: 500,
               color: '#eef0ef',
-              marginTop: 2,
+              marginTop: 8,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
