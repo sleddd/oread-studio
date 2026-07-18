@@ -114,5 +114,14 @@ export const env = {
     get ollamaBaseUrl() {
       return process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
     },
+    /**
+     * Allow a user-supplied `local` credential baseUrl to target a private /
+     * loopback / link-local host. Off by default so a user cannot point the
+     * server's outbound fetch at internal services or cloud metadata (SSRF).
+     * The env-configured ollamaBaseUrl default is always trusted regardless.
+     */
+    get allowPrivateLocalAiHost() {
+      return process.env.OREAD_ALLOW_PRIVATE_AI_HOST === '1';
+    },
   },
 };
