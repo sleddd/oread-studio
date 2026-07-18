@@ -16,6 +16,11 @@ choose.
 
 ---
 
+<img width="1365" height="716" alt="Screenshot 2026-07-17 at 10 56 11 PM" src="https://github.com/user-attachments/assets/2c2da630-fca9-4ca9-932c-98f7a4872dfa" />
+<img width="1391" height="736" alt="Screenshot 2026-07-17 at 10 55 50 PM" src="https://github.com/user-attachments/assets/7ec0dffd-b965-40e9-a2ff-76ef08008c54" />
+
+---
+
 ## Why Oread
 
 Most AI writing tools forget everything the moment you close the tab, invent
