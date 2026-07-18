@@ -5,10 +5,12 @@ services:
     name: oread-server
     runtime: node
     plan: starter
-    buildCommand: npm install && npm run build --workspace @oread/shared
+    # Build shared types, then the web UI (Fastify serves apps/web/dist).
+    buildCommand: npm install && npm run build --workspace @oread/shared && npm run build --workspace @oread/web
     # Pre-deploy: bring the public schema up to date, then migrate every user schema.
     preDeployCommand: npm run db:bootstrap && npm run db:migrate
     startCommand: npm run --workspace @oread/server start
+    healthCheckPath: /api/health
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -21,15 +23,20 @@ services:
       - key: MASTER_KEY_ACTIVE_VER
         value: "1"
       - key: MASTER_KEY_V1
-        sync: false # set in the Render env group / dashboard
+        sync: false # set in the Render dashboard: openssl rand -base64 32
       - key: SESSION_SECRET
-        sync: false
+        sync: false # set in the Render dashboard: openssl rand -base64 48
       - key: COOKIE_SECURE
         value: "true"
       - key: SESSION_TTL_DAYS
         value: "30"
+      # Single-service deploy: web + API share this service's own URL, so CORS
+      # is same-origin. WEB_ORIGIN is set to that URL for the CORS allow-list.
       - key: WEB_ORIGIN
-        sync: false
+        fromService:
+          type: web
+          name: oread-server
+          property: host
       - key: DISTILL_MODEL
         value: claude-haiku-4-5-20251001
 

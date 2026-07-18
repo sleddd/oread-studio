@@ -87,7 +87,10 @@ export const env = {
     return (process.env.WEB_ORIGIN ?? 'http://localhost:5173')
       .split(',')
       .map((s) => s.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      // Render's `fromService … property: host` yields a bare hostname; CORS
+      // needs a full origin, so prepend https:// when a scheme is missing.
+      .map((s) => (/^https?:\/\//.test(s) ? s : `https://${s}`));
   },
   get distillModel(): string {
     return process.env.DISTILL_MODEL ?? 'claude-haiku-4-5-20251001';
