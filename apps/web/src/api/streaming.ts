@@ -2,7 +2,7 @@
  * AI generate streaming client. Consumes the server's SSE stream, invoking
  * onDelta for each token and resolving with the final structured result.
  */
-import type { PersistedChatMode, Suggestion } from '@oread/shared';
+import type { PersistedChatMode, Suggestion, WebCitation } from '@oread/shared';
 
 export interface GenerateRequest {
   worldId: string;
@@ -10,12 +10,15 @@ export interface GenerateRequest {
   characterId: string | null;
   messages: { role: 'user' | 'assistant'; content: string }[];
   targetChapterId: string;
+  /** research the web this turn (server gates it by mode) */
+  allowWebSearch?: boolean;
 }
 
 export interface GenerateDone {
   kind: 'text' | 'prose' | 'suggestion';
   text?: string;
   suggestion?: Suggestion;
+  citations?: WebCitation[];
   usedMock: boolean;
   includedContext: string[];
   droppedContext: string[];

@@ -38,6 +38,8 @@ export const auth = {
   login: (b: { email: string; password: string; totp?: string }) =>
     api.post<{ user: PublicUser }>('/api/auth/login', b),
   logout: () => api.post<{ ok: boolean }>('/api/auth/logout'),
+  changePassword: (b: { currentPassword: string; newPassword: string }) =>
+    api.post<{ ok: boolean }>('/api/auth/change-password', b),
 };
 
 export const worlds = {
@@ -58,6 +60,9 @@ export const manuscripts = {
   update: (mid: string, b: { name?: string; format?: WritingFormat; order?: number }) =>
     api.patch<{ ok: boolean }>(`/api/manuscripts/${mid}`, b),
   remove: (mid: string) => api.del<{ ok: boolean }>(`/api/manuscripts/${mid}`),
+  unattached: () => api.get<{ manuscripts: ManuscriptRow[] }>('/api/manuscripts/unattached'),
+  reassign: (mid: string, worldId: string | null) =>
+    api.post<{ ok: boolean }>(`/api/manuscripts/${mid}/reassign`, { worldId }),
 };
 
 export const chapters = {
@@ -65,6 +70,8 @@ export const chapters = {
   get: (cid: string) => api.get<{ chapter: ChapterRow }>(`/api/chapters/${cid}`),
   create: (worldId: string, mid: string, b: { chapterId: string; content?: string; status?: ChapterStatusDb }) =>
     api.post<{ chapter: ChapterRow }>(`/api/worlds/${worldId}/manuscripts/${mid}/chapters`, b),
+  createInManuscript: (mid: string, b: { chapterId: string; content?: string; status?: ChapterStatusDb }) =>
+    api.post<{ chapter: ChapterRow }>(`/api/manuscripts/${mid}/chapters`, b),
   saveContent: (cid: string, content: string) =>
     api.put<{ chapter: ChapterRow }>(`/api/chapters/${cid}/content`, { content }),
   updateMeta: (cid: string, b: { status?: ChapterStatusDb; order?: number; chapter_id?: string }) =>
@@ -79,6 +86,10 @@ export const credentials = {
   create: (b: { provider: Provider; label: string; secret?: string; accountId?: string; region?: string; baseUrl?: string }) =>
     api.post<{ credential: CredentialMeta }>('/api/credentials', b),
   remove: (id: string) => api.del<{ ok: boolean }>(`/api/credentials/${id}`),
+  models: (id: string) =>
+    api.get<{ models: { id: string; label?: string }[]; source: 'live' | 'curated' }>(
+      `/api/credentials/${id}/models`,
+    ),
 };
 
 export const chats = {

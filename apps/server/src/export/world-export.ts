@@ -10,15 +10,21 @@ import type { WorldStore, StoreCtx } from '../storage/types.js';
 /** Strip anything that could carry secret material and null out credentialIds. */
 function sanitizeWorld(doc: WorldDocument): WorldDocument {
   const clone: WorldDocument = structuredClone(doc);
+  const stripSecrets = (o: Record<string, unknown> | undefined) => {
+    if (!o) return;
+    for (const suspect of ['apiKey', 'key', 'secret', 'token']) delete o[suspect];
+  };
+  // The single world model: leave credentialId dangling (null), strip secrets.
+  const model = clone.world.session?.model as unknown as Record<string, unknown> | undefined;
+  if (model) {
+    model.credentialId = null;
+    stripSecrets(model);
+  }
+  // Mode configs are behavior-only now, but strip defensively anyway.
   const configs = clone.world.session?.modeConfigs;
   if (configs) {
     for (const key of Object.keys(configs) as (keyof typeof configs)[]) {
-      const cfg = configs[key] as unknown as Record<string, unknown>;
-      // Leave the pointer as a dangling reference marker, never a real id that
-      // maps to a (different user's) credential on import.
-      cfg.credentialId = null;
-      // defensively drop any stray secret-looking fields
-      for (const suspect of ['apiKey', 'key', 'secret', 'token']) delete cfg[suspect];
+      stripSecrets(configs[key] as unknown as Record<string, unknown>);
     }
   }
   return clone;

@@ -118,6 +118,57 @@ export async function worldRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // Manuscripts with no world (detached).
+  app.get('/api/manuscripts/unattached', async (req, reply) => {
+    if (!auth(req, reply)) return;
+    return reply.send({ manuscripts: await store.listUnattachedManuscripts(ctxOf(req)) });
+  });
+
+  // Reassign a manuscript to a world (or null to unattach). Moves the chapter
+  // metadata (structure.chapters[]) from the source world doc into the target.
+  app.post<{ Params: { mid: string }; Body: { worldId: string | null } }>(
+    '/api/manuscripts/:mid/reassign',
+    async (req, reply) => {
+      if (!auth(req, reply)) return;
+      const ctx = ctxOf(req);
+      const targetWorldId = req.body?.worldId ?? null;
+      const mid = req.params.mid;
+
+      // Find the manuscript's current world + its chapters (to know which meta to move).
+      const chapters = await store.listChapters(ctx, mid);
+      const chapterIds = new Set(chapters.map((c) => c.chapter_id));
+      const current = await store.getManuscript(ctx, mid);
+      const sourceWorldId = current?.world_id ?? null;
+
+      // 1. Pull chapter meta out of the source world doc (if attached).
+      let movedMeta: unknown[] = [];
+      if (sourceWorldId) {
+        const srcDoc = await store.getWorld(ctx, sourceWorldId);
+        if (srcDoc) {
+          movedMeta = srcDoc.world.structure.chapters.filter((c) => chapterIds.has(c.id));
+          srcDoc.world.structure.chapters = srcDoc.world.structure.chapters.filter(
+            (c) => !chapterIds.has(c.id),
+          );
+          await store.saveWorld(ctx, sourceWorldId, srcDoc);
+        }
+      }
+
+      // 2. Retag manuscript + chapters to the target world.
+      await store.reassignManuscript(ctx, mid, targetWorldId);
+
+      // 3. Push chapter meta into the target world doc (if attaching).
+      if (targetWorldId && movedMeta.length > 0) {
+        const dstDoc = await store.getWorld(ctx, targetWorldId);
+        if (dstDoc) {
+          dstDoc.world.structure.chapters.push(...(movedMeta as never[]));
+          await store.saveWorld(ctx, targetWorldId, dstDoc);
+        }
+      }
+
+      return reply.send({ ok: true });
+    },
+  );
+
   app.delete<{ Params: { mid: string } }>('/api/manuscripts/:mid', async (req, reply) => {
     if (!auth(req, reply)) return;
     await store.deleteManuscript(ctxOf(req), req.params.mid);
@@ -135,6 +186,20 @@ export async function worldRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       if (!auth(req, reply)) return;
       const ch = await store.createChapter(ctxOf(req), req.params.id, req.params.mid, {
+        chapterId: req.body?.chapterId ?? `ch_${Date.now()}`,
+        content: req.body?.content,
+        status: req.body?.status,
+      });
+      return reply.code(201).send({ chapter: ch });
+    },
+  );
+
+  // Create a chapter under a manuscript directly (works for unattached ones too).
+  app.post<{ Params: { mid: string }; Body: { chapterId: string; content?: string; status?: ChapterStatusDb } }>(
+    '/api/manuscripts/:mid/chapters',
+    async (req, reply) => {
+      if (!auth(req, reply)) return;
+      const ch = await store.createChapterInManuscript(ctxOf(req), req.params.mid, {
         chapterId: req.body?.chapterId ?? `ch_${Date.now()}`,
         content: req.body?.content,
         status: req.body?.status,

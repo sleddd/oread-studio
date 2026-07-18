@@ -11,6 +11,7 @@ import type {
   GenerateRequest,
   GenerateResult,
   ProviderAuth,
+  ModelInfo,
 } from '../provider.js';
 import { ProviderError } from '../provider.js';
 import { env } from '../../env.js';
@@ -20,16 +21,31 @@ interface BedrockClientLike {
   send(cmd: unknown): Promise<{ body: Uint8Array }>;
 }
 
-async function loadClient(region: string): Promise<{
+/**
+ * Build an AWS SDK client config. If the credential carries an explicit AWS
+ * access key id (stored in ProviderAuth.accountId) + secret (ProviderAuth.secret),
+ * pass them; otherwise fall back to the ambient AWS credential chain
+ * (env vars, shared profile, IAM role).
+ */
+function awsClientConfig(auth: ProviderAuth, region: string): Record<string, unknown> {
+  const cfg: Record<string, unknown> = { region };
+  if (auth.accountId && auth.secret) {
+    cfg.credentials = {
+      accessKeyId: auth.accountId,
+      secretAccessKey: auth.secret,
+    };
+  }
+  return cfg;
+}
+
+async function loadClient(auth: ProviderAuth, region: string): Promise<{
   client: BedrockClientLike;
   Invoke: new (input: unknown) => unknown;
   InvokeStream: new (input: unknown) => unknown;
 }> {
   let mod: Record<string, unknown>;
   try {
-    // Optional dependency — resolved at runtime only. Not installed by default.
-    // @ts-expect-error module is optional and may be absent at build time
-    mod = (await import('@aws-sdk/client-bedrock-runtime')) as Record<string, unknown>;
+    mod = (await import('@aws-sdk/client-bedrock-runtime')) as unknown as Record<string, unknown>;
   } catch {
     throw new ProviderError(
       'Bedrock requires @aws-sdk/client-bedrock-runtime. Install it to use the bedrock provider.',
@@ -37,7 +53,7 @@ async function loadClient(region: string): Promise<{
   }
   const Client = mod.BedrockRuntimeClient as new (input: unknown) => BedrockClientLike;
   return {
-    client: new Client({ region }),
+    client: new Client(awsClientConfig(auth, region)),
     Invoke: mod.InvokeModelCommand as new (i: unknown) => unknown,
     InvokeStream: mod.InvokeModelWithResponseStreamCommand as new (i: unknown) => unknown,
   };
@@ -56,9 +72,62 @@ function anthropicBody(req: GenerateRequest): string {
 export class BedrockAdapter implements ProviderAdapter {
   readonly provider = 'bedrock' as const;
 
+  /**
+   * List Bedrock models via the control-plane client (@aws-sdk/client-bedrock,
+   * optional). Returns INFERENCE PROFILES first — these are the IDs you actually
+   * invoke (e.g. `us.anthropic.claude-opus-4-6-v1`); newer Anthropic models
+   * reject bare on-demand model IDs and require a profile. Falls back to
+   * foundation-model IDs, then (in the route) to the curated catalog.
+   */
+  async listModels(auth: ProviderAuth): Promise<ModelInfo[]> {
+    const region = auth.region ?? env.provider.awsRegion;
+    let mod: Record<string, unknown>;
+    try {
+      mod = (await import('@aws-sdk/client-bedrock')) as unknown as Record<string, unknown>;
+    } catch {
+      throw new ProviderError(
+        'Bedrock model listing needs @aws-sdk/client-bedrock. Using the curated list.',
+      );
+    }
+    const Client = mod.BedrockClient as new (i: unknown) => {
+      send(cmd: unknown): Promise<{
+        inferenceProfileSummaries?: { inferenceProfileId: string; inferenceProfileName?: string }[];
+        modelSummaries?: { modelId: string; modelName?: string }[];
+      }>;
+    };
+    const ListProfiles = mod.ListInferenceProfilesCommand as new (i: unknown) => unknown;
+    const ListModels = mod.ListFoundationModelsCommand as new (i: unknown) => unknown;
+    const client = new Client(awsClientConfig(auth, region));
+
+    // 1. Inference profiles — the invokable IDs.
+    const profiles: ModelInfo[] = [];
+    try {
+      const out = await client.send(new ListProfiles({ maxResults: 100 }));
+      for (const s of out.inferenceProfileSummaries ?? []) {
+        profiles.push({
+          id: s.inferenceProfileId,
+          label: s.inferenceProfileName ?? s.inferenceProfileId,
+        });
+      }
+    } catch {
+      // some regions/permissions can't list profiles — fall through to models
+    }
+    if (profiles.length) {
+      // Sort anthropic/newest-ish to the top, then alphabetical.
+      return profiles.sort((a, b) => a.id.localeCompare(b.id));
+    }
+
+    // 2. Fallback: foundation-model IDs (may still need a profile to invoke).
+    const out = await client.send(new ListModels({ byOutputModality: 'TEXT' }));
+    return (out.modelSummaries ?? []).map((m) => ({
+      id: m.modelId,
+      label: m.modelName ?? m.modelId,
+    }));
+  }
+
   async generate(req: GenerateRequest, auth: ProviderAuth): Promise<GenerateResult> {
     const region = auth.region ?? env.provider.awsRegion;
-    const { client, Invoke } = await loadClient(region);
+    const { client, Invoke } = await loadClient(auth, region);
     const out = await client.send(
       new Invoke({
         modelId: req.model,
@@ -84,7 +153,7 @@ export class BedrockAdapter implements ProviderAdapter {
     onDelta: (t: string) => void,
   ): Promise<GenerateResult> {
     const region = auth.region ?? env.provider.awsRegion;
-    const { client, InvokeStream } = await loadClient(region);
+    const { client, InvokeStream } = await loadClient(auth, region);
     const out = (await client.send(
       new InvokeStream({
         modelId: req.model,

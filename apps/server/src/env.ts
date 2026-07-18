@@ -67,6 +67,16 @@ export const env = {
   get sessionTtlDays(): number {
     return Number(process.env.SESSION_TTL_DAYS ?? '30');
   },
+  /**
+   * Comma-separated allow-list of emails permitted to sign up. Empty/unset =
+   * signup is open to anyone. Emails are compared lowercased+trimmed.
+   */
+  get signupWhitelist(): string[] {
+    return (process.env.SIGNUP_WHITELIST ?? '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+  },
   get cookieSecure(): boolean {
     return bool(process.env.COOKIE_SECURE, false);
   },

@@ -54,7 +54,8 @@ export interface WorldSnapshotRow {
 // ─── manuscripts (named grouping) ───────────────────────────
 export interface ManuscriptRow {
   id: string;
-  world_id: string;
+  /** null when the manuscript is unattached (no world) */
+  world_id: string | null;
   name: string;
   format: WritingFormat;
   order: number;
@@ -65,7 +66,8 @@ export interface ManuscriptRow {
 // ─── chapters (prose) ───────────────────────────────────────
 export interface ChapterRow {
   id: string;
-  world_id: string;
+  /** null when the owning manuscript is unattached */
+  world_id: string | null;
   manuscript_id: string;
   /** matches world.structure.chapters[].id */
   chapter_id: string;
@@ -93,6 +95,12 @@ export interface ChapterRevisionRow {
 }
 
 // ─── chats ──────────────────────────────────────────────────
+/** A web source the model consulted while researching (Discuss/Draft). */
+export interface WebCitation {
+  url: string;
+  title: string;
+}
+
 export interface ChatMessage {
   id: number | string;
   role: 'user' | 'assistant';
@@ -101,6 +109,8 @@ export interface ChatMessage {
   text?: string;
   sug?: import('./world.js').Suggestion;
   status?: 'pending' | 'accepted' | 'rejected';
+  /** web sources cited when the turn used research (only present if any) */
+  citations?: WebCitation[];
   time: string;
 }
 

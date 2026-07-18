@@ -190,6 +190,43 @@ export function MessageItem({ m }: { m: ChatMessage }): JSX.Element {
       >
         {m.text}
       </div>
+      {m.citations && m.citations.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <div
+            style={{
+              fontSize: 10,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              fontWeight: 700,
+              color: '#6d7473',
+              marginBottom: 6,
+            }}
+          >
+            Sources
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {m.citations.map((cite, i) => (
+              <a
+                key={cite.url}
+                href={cite.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={cite.url}
+                style={{
+                  fontSize: 12,
+                  color: 'var(--accent,#2e9d9d)',
+                  textDecoration: 'none',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {i + 1}. {cite.title}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
       {isProse && (
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
           <button

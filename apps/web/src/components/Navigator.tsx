@@ -1,7 +1,32 @@
 import { useState } from 'react';
 import { useStore } from '../state/store.js';
 import { worldSections } from '../state/worldTree.js';
+import type { AddableKind } from '../state/worldEdits.js';
 import { FORMAT_SPECS } from '@oread/shared';
+
+/** The addable entity kinds offered under each World-tree section. */
+const SECTION_ADDS: Record<string, { kind: AddableKind; label: string }[]> = {
+  Setting: [
+    { kind: 'location', label: '+ Location' },
+    { kind: 'rule', label: '+ Rule' },
+  ],
+  Entities: [
+    { kind: 'character', label: '+ Character' },
+    { kind: 'relationship', label: '+ Relationship' },
+    { kind: 'concept', label: '+ Concept' },
+    { kind: 'source', label: '+ Source' },
+  ],
+  Structure: [
+    { kind: 'scene', label: '+ Scene' },
+    { kind: 'timeline', label: '+ Timeline event' },
+  ],
+  Memory: [
+    { kind: 'event', label: '+ Event' },
+    { kind: 'canon', label: '+ Canon' },
+    { kind: 'thread', label: '+ Thread' },
+    { kind: 'decision', label: '+ Decision' },
+  ],
+};
 
 const accentDim = 'rgba(46,157,157,0.14)';
 
@@ -146,56 +171,121 @@ function OutlineTab(): JSX.Element {
             {store.manuscriptsList.map((m) => {
               const active = m.id === store.manuscriptId;
               return (
-                <button
+                <div
                   key={m.id}
-                  onClick={() => {
-                    void store.openManuscript(m.id);
-                    setMsPickerOpen(false);
-                  }}
                   style={{
-                    width: '100%',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 10,
-                    padding: '8px 10px',
                     borderRadius: 9,
-                    textAlign: 'left',
                     background: active ? accentDim : 'transparent',
                   }}
                 >
-                  <span
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      background: active ? 'var(--accent,#2e9d9d)' : '#333a3a',
-                      flex: '0 0 auto',
+                  <button
+                    onClick={() => {
+                      void store.openManuscript(m.id);
+                      setMsPickerOpen(false);
                     }}
-                  />
-                  <span style={{ minWidth: 0 }}>
+                    style={{
+                      flex: '1 1 auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 10px',
+                      borderRadius: 9,
+                      textAlign: 'left',
+                      background: 'transparent',
+                      minWidth: 0,
+                    }}
+                  >
                     <span
                       style={{
-                        display: 'block',
-                        fontSize: 13.5,
-                        fontWeight: 600,
-                        color: '#e9ecea',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: active ? 'var(--accent,#2e9d9d)' : '#333a3a',
+                        flex: '0 0 auto',
                       }}
-                    >
-                      {m.name}
+                    />
+                    <span style={{ minWidth: 0 }}>
+                      <span
+                        style={{
+                          display: 'block',
+                          fontSize: 13.5,
+                          fontWeight: 600,
+                          color: '#e9ecea',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {m.name}
+                      </span>
+                      <span style={{ fontSize: 11, color: '#6d7473' }}>
+                        {FORMAT_SPECS[m.format].label}
+                      </span>
                     </span>
-                    <span style={{ fontSize: 11, color: '#6d7473' }}>
-                      {FORMAT_SPECS[m.format].label}
-                    </span>
-                  </span>
-                </button>
+                  </button>
+                  <select
+                    title="Move to world"
+                    value={m.world_id ?? ''}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      void store.reassignManuscript(m.id, v === '' ? null : v);
+                      setMsPickerOpen(false);
+                    }}
+                    style={{
+                      flex: '0 0 auto',
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#6d7473',
+                      fontSize: 11,
+                      maxWidth: 96,
+                    }}
+                  >
+                    <option value="">(no world)</option>
+                    {store.worldList.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    title="Rename manuscript"
+                    onClick={() => {
+                      const name = prompt('Rename manuscript', m.name);
+                      if (name != null && name.trim() && name.trim() !== m.name) {
+                        void store.renameManuscript(m.id, name);
+                      }
+                    }}
+                    style={{ flex: '0 0 auto', color: '#6d7473', fontSize: 12.5, padding: '0 7px' }}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    title="Delete manuscript"
+                    onClick={() => {
+                      const last = store.manuscriptsList.length === 1;
+                      const msg = last
+                        ? `Delete manuscript “${m.name}”? Its chapters are removed permanently, and a fresh empty manuscript will replace it.`
+                        : `Delete manuscript “${m.name}”? Its chapters are removed permanently.`;
+                      if (confirm(msg)) {
+                        void store.deleteManuscript(m.id);
+                        setMsPickerOpen(false);
+                      }
+                    }}
+                    style={{ flex: '0 0 auto', color: '#6d7473', fontSize: 14, padding: '0 9px' }}
+                  >
+                    ×
+                  </button>
+                </div>
               );
             })}
             <button
               onClick={() => {
-                void store.newManuscript();
+                const name = prompt('Name your new manuscript', 'Untitled Manuscript');
+                if (name === null) return; // cancelled
+                void store.newManuscript(name);
                 setMsPickerOpen(false);
               }}
               style={{
@@ -355,11 +445,17 @@ function WorldTab(): JSX.Element {
             </button>
             {isOpen && (
               <div style={{ padding: '2px 0 6px 6px' }}>
-                {sec.items.length === 0 ? (
+                {sec.items.length === 0 && !SECTION_ADDS[sec.label] && (
                   <div style={{ fontSize: 12, color: '#4f5655', fontStyle: 'italic', padding: '6px 10px' }}>
                     Nothing here yet — add as you write.
                   </div>
-                ) : (
+                )}
+                {sec.items.length === 0 && SECTION_ADDS[sec.label] && (
+                  <div style={{ fontSize: 12, color: '#4f5655', fontStyle: 'italic', padding: '6px 10px' }}>
+                    Nothing here yet.
+                  </div>
+                )}
+                {sec.items.length > 0 &&
                   sec.items.map((it) => {
                     const active = store.selectedNode === it.key && store.view === 'world';
                     return (
@@ -410,7 +506,26 @@ function WorldTab(): JSX.Element {
                         </span>
                       </button>
                     );
-                  })
+                  })}
+                {SECTION_ADDS[sec.label] && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 6px 2px' }}>
+                    {SECTION_ADDS[sec.label]!.map((a) => (
+                      <button
+                        key={a.kind}
+                        onClick={() => store.addWorldEntity(a.kind)}
+                        style={{
+                          fontSize: 11.5,
+                          fontWeight: 600,
+                          color: 'var(--accent,#2e9d9d)',
+                          border: '1px dashed #22403f',
+                          borderRadius: 7,
+                          padding: '4px 9px',
+                        }}
+                      >
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
             )}

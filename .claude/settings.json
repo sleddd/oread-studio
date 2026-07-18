@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node_modules/.bin/tsx /private/tmp/claude-501/-Users-fastandcurious-apps-oread-frontend/142fe4f8-6758-4707-a278-52d69718689f/scratchpad/load-memory-lattice.mjs)",
+      "Bash(grep -n \"cast:\\\\|cast =\\\\|castFor\\\\|setCast\\\\|patch\\({ cast\\\\|cast,\" apps/web/src/state/store.tsx)",
+      "Bash(node_modules/.bin/tsx /tmp/wire-model.mjs)",
+      "Bash(grep -v \"SECURITY WARNING\\\\|In the next\\\\|To prepare\\\\|If you want\\\\|See https\\\\|trace-warnings\\\\|^$\")",
+      "Bash(grep -Ei '\\(^|/\\)\\\\.env$|node_modules/|/dist/|\\\\.log$')",
+      "Bash(grep -Ei '\\(^|/\\)\\\\.env$|node_modules/|/dist/')"
+    ]
+  }
+}

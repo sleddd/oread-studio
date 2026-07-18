@@ -50,6 +50,8 @@ interface WorldSideStore {
 }
 
 const SNAPSHOT_FULL_EVERY = 10;
+/** Pseudo-world directory holding detached (world-less) manuscripts. */
+const UNATTACHED = '__unattached__';
 const nowIso = () => new Date().toISOString();
 
 export class FileStore implements WorldStore {
@@ -123,6 +125,18 @@ export class FileStore implements WorldStore {
   }
 
   async deleteWorld(_ctx: StoreCtx, worldId: string): Promise<void> {
+    // Detach (don't cascade) this world's manuscripts: move them to the
+    // unattached pseudo-world, retagging world_id to null.
+    const side = existsSync(this.#worldDir(worldId)) ? this.#readSide(worldId) : null;
+    if (side && side.manuscripts.length > 0) {
+      const dest = this.#readSide(UNATTACHED);
+      for (const m of side.manuscripts) m.world_id = null;
+      for (const c of side.chapters) c.world_id = null;
+      dest.manuscripts.push(...side.manuscripts);
+      dest.chapters.push(...side.chapters);
+      dest.revisions.push(...side.revisions);
+      this.#writeSide(UNATTACHED, dest);
+    }
     rmSync(this.#worldDir(worldId), { recursive: true, force: true });
   }
 
@@ -171,6 +185,48 @@ export class FileStore implements WorldStore {
 
   async listManuscripts(_ctx: StoreCtx, worldId: string): Promise<ManuscriptRow[]> {
     return this.#readSide(worldId).manuscripts.sort((a, b) => a.order - b.order);
+  }
+
+  async getManuscript(_ctx: StoreCtx, manuscriptId: string): Promise<ManuscriptRow | null> {
+    const worldId = this.#worldOfManuscript(manuscriptId);
+    if (!worldId) return null;
+    return this.#readSide(worldId).manuscripts.find((m) => m.id === manuscriptId) ?? null;
+  }
+
+  async listUnattachedManuscripts(_ctx: StoreCtx): Promise<ManuscriptRow[]> {
+    // Unattached manuscripts live under the special "__unattached__" world dir.
+    if (!existsSync(join(this.#root, UNATTACHED))) return [];
+    return this.#readSide(UNATTACHED).manuscripts.sort((a, b) => a.order - b.order);
+  }
+
+  async reassignManuscript(
+    _ctx: StoreCtx,
+    manuscriptId: string,
+    worldId: string | null,
+  ): Promise<void> {
+    const fromWorld = this.#worldOfManuscript(manuscriptId);
+    if (!fromWorld) return;
+    const dest = worldId ?? UNATTACHED;
+    if (fromWorld === dest) return;
+    const src = this.#readSide(fromWorld);
+    const ms = src.manuscripts.find((m) => m.id === manuscriptId);
+    if (!ms) return;
+    const chapters = src.chapters.filter((c) => c.manuscript_id === manuscriptId);
+    const chapterIds = chapters.map((c) => c.id);
+    const revs = src.revisions.filter((r) => chapterIds.includes(r.chapter_id));
+    // remove from source
+    src.manuscripts = src.manuscripts.filter((m) => m.id !== manuscriptId);
+    src.chapters = src.chapters.filter((c) => c.manuscript_id !== manuscriptId);
+    src.revisions = src.revisions.filter((r) => !chapterIds.includes(r.chapter_id));
+    this.#writeSide(fromWorld, src);
+    // add to dest (retag world_id)
+    const destSide = this.#readSide(dest);
+    ms.world_id = worldId;
+    chapters.forEach((c) => (c.world_id = worldId));
+    destSide.manuscripts.push(ms);
+    destSide.chapters.push(...chapters);
+    destSide.revisions.push(...revs);
+    this.#writeSide(dest, destSide);
   }
 
   async createManuscript(
@@ -271,6 +327,35 @@ export class FileStore implements WorldStore {
     };
     side.chapters.push(row);
     this.#writeSide(worldId, side);
+    return row;
+  }
+
+  async createChapterInManuscript(
+    _ctx: StoreCtx,
+    manuscriptId: string,
+    input: CreateChapterInput,
+  ): Promise<ChapterRow> {
+    const dir = this.#worldOfManuscript(manuscriptId);
+    if (!dir) throw new Error('manuscript not found');
+    const side = this.#readSide(dir);
+    const ms = side.manuscripts.find((m) => m.id === manuscriptId);
+    if (!ms) throw new Error('manuscript not found');
+    const content = input.content ?? '';
+    const siblings = side.chapters.filter((c) => c.manuscript_id === manuscriptId);
+    const row: ChapterRow = {
+      id: randomUUID(),
+      world_id: ms.world_id, // inherits (null when unattached)
+      manuscript_id: manuscriptId,
+      chapter_id: input.chapterId,
+      content,
+      word_count: countWords(content),
+      status: input.status ?? 'outline',
+      order: siblings.length,
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    };
+    side.chapters.push(row);
+    this.#writeSide(dir, side);
     return row;
   }
 

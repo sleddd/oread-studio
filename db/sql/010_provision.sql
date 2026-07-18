@@ -66,10 +66,12 @@ BEGIN
     p_schema);
 
   -- ── MANUSCRIPTS — named grouping; format lives here ──
+  -- world_id is NULLABLE: a manuscript can be unattached (no world). Deleting a
+  -- world SETS NULL (detaches) rather than cascading its manuscripts away.
   EXECUTE format($t$
     CREATE TABLE %I.manuscripts (
       id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      world_id   UUID NOT NULL REFERENCES %I.worlds(id) ON DELETE CASCADE,
+      world_id   UUID REFERENCES %I.worlds(id) ON DELETE SET NULL,
       name       TEXT NOT NULL DEFAULT 'Untitled Manuscript',
       format     TEXT NOT NULL DEFAULT 'novel' CHECK (format IN
                    ('novel','short','screenplay','poetry','chat','essay')),
@@ -82,10 +84,12 @@ BEGIN
     'CREATE INDEX ON %I.manuscripts (world_id, "order")', p_schema);
 
   -- ── CHAPTERS — one row per chapter, the autosaving prose ──
+  -- world_id is NULLABLE (follows the manuscript's attachment). A chapter is
+  -- always owned by its manuscript (that FK stays NOT NULL / CASCADE).
   EXECUTE format($t$
     CREATE TABLE %I.chapters (
       id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      world_id      UUID NOT NULL REFERENCES %I.worlds(id) ON DELETE CASCADE,
+      world_id      UUID REFERENCES %I.worlds(id) ON DELETE SET NULL,
       manuscript_id UUID NOT NULL REFERENCES %I.manuscripts(id) ON DELETE CASCADE,
       chapter_id    TEXT NOT NULL,
       content       TEXT NOT NULL DEFAULT '',

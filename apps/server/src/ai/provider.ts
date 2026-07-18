@@ -4,7 +4,7 @@
  * only transport/auth differs. Both a non-streaming `generate` and a streaming
  * `stream` are supported.
  */
-import type { Provider } from '@oread/shared';
+import type { Provider, WebCitation } from '@oread/shared';
 
 export interface ChatTurn {
   role: 'user' | 'assistant';
@@ -17,12 +17,25 @@ export interface GenerateRequest {
   messages: ChatTurn[];
   temperature: number;
   maxTokens?: number;
+  /**
+   * Let the model research the live web via the provider's native web-search
+   * tool (Anthropic/OpenAI). Only set by modes that permit it (discuss/draft).
+   * Adapters that don't support it ignore the flag.
+   */
+  webSearch?: boolean;
 }
 
 export interface GenerateResult {
   text: string;
   /** provider-native stop reason, best-effort */
   stopReason?: string;
+  /** web sources the model consulted, if web search ran */
+  citations?: WebCitation[];
+}
+
+export interface ModelInfo {
+  id: string;
+  label?: string;
 }
 
 export interface ProviderAdapter {
@@ -33,6 +46,8 @@ export interface ProviderAdapter {
     apiKey: ProviderAuth,
     onDelta: (text: string) => void,
   ): Promise<GenerateResult>;
+  /** List every model the provider offers for this credential. */
+  listModels?(auth: ProviderAuth): Promise<ModelInfo[]>;
 }
 
 /**
@@ -41,9 +56,9 @@ export interface ProviderAdapter {
  * needs no secret. Adapters read what they need.
  */
 export interface ProviderAuth {
-  secret?: string; // API key / token
-  accountId?: string; // cloudflare
-  region?: string; // bedrock
+  secret?: string; // API key / token (also: Bedrock AWS secret access key)
+  accountId?: string; // cloudflare account id (also: Bedrock AWS access key id)
+  region?: string; // bedrock region
   baseUrl?: string; // local / self-hosted
 }
 

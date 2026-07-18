@@ -3,6 +3,8 @@ import { ACCENTS } from '../theme/tokens.js';
 import { WRITING_FORMATS } from '@oread/shared';
 import type { ProseTypeface } from '@oread/shared';
 import type { WritingFormat } from '@oread/shared';
+import { CredentialsManager } from './CredentialsManager.js';
+import { ChangePassword } from './ChangePassword.js';
 
 const TYPEFACES: ProseTypeface[] = ['Serif', 'Sans', 'Monospace'];
 
@@ -22,7 +24,9 @@ export function SettingsPopover({ onClose: _onClose }: { onClose: () => void }):
         position: 'absolute',
         top: 'calc(100% + 10px)',
         right: 0,
-        width: 300,
+        width: 320,
+        maxHeight: '80vh',
+        overflowY: 'auto',
         background: '#141818',
         border: '1px solid #262b2b',
         borderRadius: 14,
@@ -114,6 +118,15 @@ export function SettingsPopover({ onClose: _onClose }: { onClose: () => void }):
           </option>
         ))}
       </select>
+
+      <div style={{ ...label, marginTop: 22 }}>Credentials</div>
+      <div style={{ fontSize: 11.5, color: '#6d7473', marginBottom: 12, lineHeight: 1.4 }}>
+        API keys for AI providers, encrypted at rest. Select one per world in Session → Model.
+      </div>
+      <CredentialsManager />
+
+      <div style={{ ...label, marginTop: 22 }}>Password</div>
+      <ChangePassword />
     </div>
   );
 }

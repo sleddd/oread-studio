@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import {
   DEFAULT_CONTEXT_RECIPES,
   DEFAULT_MEMORY_WRITEBACK,
+  DEFAULT_MODEL_SETTINGS,
 } from '@oread/shared';
 import type {
   WorldDocument,
@@ -15,10 +16,8 @@ import type {
 } from '@oread/shared';
 
 function defaultModeConfigs(): ModeConfigs {
-  const base = { credentialId: null, provider: null, model: null, temperature: 0.85 } as const;
   return {
     cowrite: {
-      ...base,
       turnScope: 'paragraph',
       userRole: 'author',
       handoffRule: 'hand back after one turn',
@@ -26,7 +25,6 @@ function defaultModeConfigs(): ModeConfigs {
       maxTurnLength: 220,
     },
     draft: {
-      ...base,
       target: '',
       fromMaterial: 'outline',
       lengthTarget: '~800',
@@ -34,26 +32,25 @@ function defaultModeConfigs(): ModeConfigs {
       canAlterCanon: false,
     },
     edit: {
-      ...base,
       target: '',
       editLevel: 'line',
       constraints: [],
       outputFormat: 'redline',
     },
     critique: {
-      ...base,
       target: '',
       lenses: ['pacing'],
       depth: 'margin-notes',
       suggestRewrites: true,
     },
-    discuss: { ...base, focus: 'character', mayProposeCanon: false },
+    discuss: { focus: 'character', mayProposeCanon: false },
   };
 }
 
 export function defaultSession(): WorldSession {
   return {
     defaultMode: 'cowrite',
+    model: { ...DEFAULT_MODEL_SETTINGS },
     modeConfigs: defaultModeConfigs(),
     memoryWriteback: DEFAULT_MEMORY_WRITEBACK,
     contextRecipes: DEFAULT_CONTEXT_RECIPES,

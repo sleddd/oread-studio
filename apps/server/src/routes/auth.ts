@@ -11,7 +11,10 @@ import {
   createSession,
   revokeSession,
   touchLastLogin,
+  changePassword,
   SignupError,
+  SignupForbiddenError,
+  PasswordChangeError,
   findUserById,
 } from '../auth/accounts.js';
 import {
@@ -59,6 +62,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       setSessionCookie(reply, raw);
       return reply.code(201).send({ user });
     } catch (e) {
+      if (e instanceof SignupForbiddenError) return reply.code(403).send({ error: e.message });
       if (e instanceof SignupError) return reply.code(409).send({ error: e.message });
       req.log.error(e);
       return reply.code(500).send({ error: 'signup failed' });
@@ -102,6 +106,28 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (!req.auth) return reply.code(401).send({ error: 'unauthenticated' });
     return reply.send({ user: req.auth.user });
   });
+
+  app.post<{ Body: { currentPassword: string; newPassword: string } }>(
+    '/api/auth/change-password',
+    authLimit,
+    async (req, reply) => {
+      if (!req.auth) return reply.code(401).send({ error: 'unauthenticated' });
+      const { currentPassword, newPassword } = req.body ?? ({} as { currentPassword: string; newPassword: string });
+      try {
+        await changePassword({
+          userId: req.auth.user.id,
+          currentPassword: currentPassword ?? '',
+          newPassword: newPassword ?? '',
+          keepSessionId: req.auth.sessionId,
+        });
+        return reply.send({ ok: true });
+      } catch (e) {
+        if (e instanceof PasswordChangeError) return reply.code(400).send({ error: e.message });
+        req.log.error(e);
+        return reply.code(500).send({ error: 'failed to change password' });
+      }
+    },
+  );
 
   // ─── TOTP management (must be authenticated) ───
   app.post('/api/auth/totp/setup', async (req, reply) => {

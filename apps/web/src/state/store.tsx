@@ -24,6 +24,8 @@ import type {
   WritingFormat,
   Suggestion,
   PersistedChatMode,
+  CredentialMeta,
+  Provider,
 } from '@oread/shared';
 import { countWords } from '@oread/shared';
 import * as apiWorlds from '../api/index.js';
@@ -32,6 +34,8 @@ import { applyAccent } from '../theme/tokens.js';
 import { useAutosave } from './useAutosave.js';
 import { DEFAULT_CFG, type ModeCfg } from './modes.js';
 import { castFor, NARRATOR, type CastMember } from './cast.js';
+import { setByPath } from './nodeDetail.js';
+import { addEntity, deleteEntity, type AddableKind } from './worldEdits.js';
 import type { ChatMode } from '@oread/shared';
 import type { ProseTypeface } from '@oread/shared';
 import type { WorldSummary } from '../api/index.js';
@@ -48,6 +52,13 @@ function nowTime(): string {
 let uid = 1000;
 const nextId = () => ++uid;
 
+/**
+ * Modes that may research the live web. Mirrors the server's `mayResearch`
+ * contract (permissions.ts) — the server is authoritative; this only decides
+ * whether to show/send the toggle. Discuss covers character chat too.
+ */
+const MODE_ALLOWS_RESEARCH = (m: ChatMode): boolean => m === 'discuss' || m === 'draft';
+
 export type NavMode = 'outline' | 'world';
 export type CenterView = 'write' | 'world';
 
@@ -57,6 +68,9 @@ interface StoreState {
   // world runtime (one open at a time)
   worldList: WorldSummary[];
   worldId: string | null;
+  /** true when viewing the unattached (no-world) manuscripts */
+  unattachedView: boolean;
+  unattachedList: ManuscriptRow[];
   world: WorldDocument | null;
   manuscriptsList: ManuscriptRow[];
   manuscriptId: string | null;
@@ -69,12 +83,16 @@ interface StoreState {
   format: WritingFormat;
   accent: string;
   proseTypeface: ProseTypeface;
+  // credentials (account-wide)
+  credentialsList: CredentialMeta[];
   // chat client-state (unsaved until Save Chat)
   character: string;
   mode: ChatMode;
   cfg: ModeCfg;
   msgs: ChatMessage[];
   thinking: boolean;
+  /** research the web on the next turn (Discuss/Draft only) */
+  research: boolean;
   toast: string | null;
 }
 
@@ -83,22 +101,44 @@ export interface StoreApi extends StoreState {
   activeChapter: ChapterRow | null;
   // account
   setAuthed: (v: boolean) => void;
-  refreshWorlds: () => Promise<void>;
+  refreshWorlds: () => Promise<WorldSummary[]>;
+  logout: () => Promise<void>;
+  // credentials
+  refreshCredentials: () => Promise<void>;
+  addCredential: (input: {
+    provider: Provider;
+    label: string;
+    secret?: string;
+    accountId?: string;
+    region?: string;
+    baseUrl?: string;
+  }) => Promise<void>;
+  removeCredential: (id: string) => Promise<void>;
   // world switching (flush autosave first)
   openWorld: (id: string) => Promise<void>;
   newWorld: () => Promise<void>;
   saveWorld: () => Promise<void>;
+  deleteWorld: (id: string) => Promise<void>;
+  deleteManuscript: (mid: string) => Promise<void>;
+  openUnattached: () => Promise<void>;
+  reassignManuscript: (mid: string, worldId: string | null) => Promise<void>;
+  unattachedCount: number;
   // manuscript / chapter
   openManuscript: (mid: string) => Promise<void>;
-  newManuscript: () => Promise<void>;
+  newManuscript: (name?: string) => Promise<void>;
+  renameManuscript: (mid: string, name: string) => Promise<void>;
   openChapter: (cid: string) => void;
   newChapter: () => Promise<void>;
   setChapterText: (text: string) => void;
+  saveDraft: () => Promise<void>;
   setFormat: (f: WritingFormat) => void;
   // world detail
   selectNode: (key: string | null) => void;
   goWrite: () => void;
   setNavMode: (m: NavMode) => void;
+  editWorldField: (path: string, value: unknown) => void;
+  addWorldEntity: (kind: AddableKind) => void;
+  deleteWorldNode: (key: string) => void;
   // settings
   setAccent: (hex: string) => void;
   setProseTypeface: (t: ProseTypeface) => void;
@@ -106,11 +146,13 @@ export interface StoreApi extends StoreState {
   setCharacter: (id: string) => void;
   setMode: (m: ChatMode) => void;
   setCfg: (mode: ChatMode, key: string, value: string) => void;
+  setResearch: (on: boolean) => void;
   send: (text: string) => Promise<void>;
   insertProse: (text: string) => Promise<void>;
   acceptSuggestion: (msgId: number | string, apply: boolean) => Promise<void>;
   rejectSuggestion: (msgId: number | string) => void;
   saveChat: () => Promise<void>;
+  clearChat: () => void;
   // toast
   showToast: (t: string) => void;
 }
@@ -127,6 +169,8 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     authed: false,
     worldList: [],
     worldId: null,
+    unattachedView: false,
+    unattachedList: [],
     world: null,
     manuscriptsList: [],
     manuscriptId: null,
@@ -138,8 +182,10 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     format: 'novel',
     accent: '#2e9d9d',
     proseTypeface: 'Serif',
+    credentialsList: [],
     character: 'narrator',
     mode: 'cowrite',
+    research: false,
     cfg: DEFAULT_CFG,
     msgs: [],
     thinking: false,
@@ -156,10 +202,37 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
 
   const autosave = useAutosave(undefined, () => showToast('Reconnecting… changes will retry'));
 
-  const refreshWorlds = useCallback(async () => {
-    const { worlds } = await apiWorlds.worlds.list();
-    patch({ worldList: worlds });
+  const refreshWorlds = useCallback(async (): Promise<WorldSummary[]> => {
+    const [{ worlds }, { manuscripts }] = await Promise.all([
+      apiWorlds.worlds.list(),
+      apiWorlds.manuscripts.unattached(),
+    ]);
+    patch({ worldList: worlds, unattachedList: manuscripts });
+    return worlds;
   }, [patch]);
+
+  const openUnattached = useCallback(async () => {
+    await autosave.flush();
+    const { manuscripts } = await apiWorlds.manuscripts.unattached();
+    const firstMs = manuscripts[0] ?? null;
+    const chs = firstMs ? (await apiWorlds.chapters.list(firstMs.id)).chapters : [];
+    patch({
+      worldId: null,
+      unattachedView: true,
+      world: null,
+      manuscriptsList: manuscripts,
+      unattachedList: manuscripts,
+      manuscriptId: firstMs?.id ?? null,
+      chaptersList: chs,
+      chapterRowId: chs[0]?.id ?? null,
+      format: firstMs?.format ?? 'novel',
+      view: 'write',
+      navMode: 'outline',
+      selectedNode: null,
+      character: NARRATOR.id,
+    });
+    showToast('Unattached manuscripts');
+  }, [autosave, patch, showToast]);
 
   const loadManuscriptChapters = useCallback(
     async (worldId: string, mid: string): Promise<ChapterRow[]> => {
@@ -180,6 +253,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
       const chs = firstMs ? await loadManuscriptChapters(id, firstMs.id) : [];
       patch({
         worldId: id,
+        unattachedView: false,
         world,
         manuscriptsList: manuscripts,
         manuscriptId: firstMs?.id ?? null,
@@ -210,11 +284,116 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     showToast('World saved');
   }, [s.worldId, s.world, showToast]);
 
+  const logout = useCallback(async () => {
+    try {
+      await apiWorlds.auth.logout();
+    } finally {
+      patch({ authed: false, worldId: null, world: null, worldList: [], msgs: [] });
+    }
+  }, [patch]);
+
+  const refreshCredentials = useCallback(async () => {
+    const { credentials } = await apiWorlds.credentials.list();
+    patch({ credentialsList: credentials });
+  }, [patch]);
+
+  const addCredential = useCallback(
+    async (input: {
+      provider: Provider;
+      label: string;
+      secret?: string;
+      accountId?: string;
+      region?: string;
+      baseUrl?: string;
+    }) => {
+      await apiWorlds.credentials.create(input);
+      await refreshCredentials();
+      showToast('Credential saved');
+    },
+    [refreshCredentials, showToast],
+  );
+
+  const removeCredential = useCallback(
+    async (id: string) => {
+      await apiWorlds.credentials.remove(id);
+      await refreshCredentials();
+      showToast('Credential removed');
+    },
+    [refreshCredentials, showToast],
+  );
+
+  const deleteWorld = useCallback(
+    async (id: string) => {
+      await apiWorlds.worlds.remove(id);
+      // Manuscripts are DETACHED (not deleted) — refresh worlds + unattached.
+      await refreshWorlds();
+      if (id === s.worldId) {
+        const { worlds } = await apiWorlds.worlds.list();
+        if (worlds.length > 0) await openWorld(worlds[0]!.id);
+        else await openUnattached();
+      }
+      showToast('World deleted · its manuscripts moved to Unattached');
+    },
+    // openWorld / openUnattached / refreshWorlds captured at call time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [s.worldId, showToast],
+  );
+
+  const reassignManuscript = useCallback(
+    async (mid: string, worldId: string | null) => {
+      await autosave.flush();
+      await apiWorlds.manuscripts.reassign(mid, worldId);
+      await refreshWorlds();
+      // If the reassigned manuscript was the open one, follow it to its new home.
+      if (mid === s.manuscriptId) {
+        if (worldId) await openWorld(worldId);
+        else await openUnattached();
+      } else if (s.worldId) {
+        // refresh the current world's manuscript list
+        const { manuscripts } = await apiWorlds.manuscripts.list(s.worldId);
+        patch({ manuscriptsList: manuscripts });
+      } else if (s.unattachedView) {
+        await openUnattached();
+      }
+      showToast(worldId ? 'Moved to world' : 'Moved to Unattached');
+    },
+    // openWorld / openUnattached / refreshWorlds captured at call time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [s.manuscriptId, s.worldId, s.unattachedView, autosave, patch, showToast],
+  );
+
+  const deleteManuscript = useCallback(
+    async (mid: string) => {
+      await autosave.flush();
+      await apiWorlds.manuscripts.remove(mid);
+      if (s.unattachedView) {
+        await refreshWorlds();
+        await openUnattached();
+        showToast('Manuscript deleted');
+        return;
+      }
+      if (!s.worldId) return;
+      const { manuscripts } = await apiWorlds.manuscripts.list(s.worldId);
+      patch({ manuscriptsList: manuscripts });
+      if (mid === s.manuscriptId) {
+        if (manuscripts.length > 0) {
+          await openManuscript(manuscripts[0]!.id);
+        } else {
+          // No manuscripts left — create a fresh one so the world always has one.
+          await newManuscript();
+        }
+      }
+      showToast('Manuscript deleted');
+    },
+    // openManuscript / newManuscript / openUnattached / refreshWorlds captured at call time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [s.worldId, s.manuscriptId, s.unattachedView, autosave, patch, showToast],
+  );
+
   const openManuscript = useCallback(
     async (mid: string) => {
-      if (!s.worldId) return;
       await autosave.flush();
-      const chs = await loadManuscriptChapters(s.worldId, mid);
+      const chs = (await apiWorlds.chapters.list(mid)).chapters;
       const ms = s.manuscriptsList.find((m) => m.id === mid);
       patch({
         manuscriptId: mid,
@@ -229,11 +408,11 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     [s.worldId, s.manuscriptsList, autosave, loadManuscriptChapters, patch, showToast],
   );
 
-  const newManuscript = useCallback(async () => {
+  const newManuscript = useCallback(async (name?: string) => {
     if (!s.worldId) return;
     await autosave.flush();
     const { manuscript } = await apiWorlds.manuscripts.create(s.worldId, {
-      name: 'Untitled Manuscript',
+      name: name?.trim() || 'Untitled Manuscript',
       format: 'novel',
     });
     const { manuscripts } = await apiWorlds.manuscripts.list(s.worldId);
@@ -242,22 +421,42 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     showToast('New manuscript created');
   }, [s.worldId, autosave, openManuscript, patch, showToast]);
 
+  const renameManuscript = useCallback(
+    async (mid: string, name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      await apiWorlds.manuscripts.update(mid, { name: trimmed });
+      setS((prev) => ({
+        ...prev,
+        manuscriptsList: prev.manuscriptsList.map((m) =>
+          m.id === mid ? { ...m, name: trimmed } : m,
+        ),
+        unattachedList: prev.unattachedList.map((m) =>
+          m.id === mid ? { ...m, name: trimmed } : m,
+        ),
+      }));
+      showToast('Manuscript renamed');
+    },
+    [showToast],
+  );
+
   const openChapter = useCallback(
     (cid: string) => patch({ chapterRowId: cid, view: 'write', selectedNode: null }),
     [patch],
   );
 
   const newChapter = useCallback(async () => {
-    if (!s.worldId || !s.manuscriptId) return;
+    if (!s.manuscriptId) return;
     const chapterId = `ch_${nextId()}`;
-    const { chapter } = await apiWorlds.chapters.create(s.worldId, s.manuscriptId, {
+    // Works whether attached (worldId) or unattached (null) — chapter follows its manuscript.
+    const { chapter } = await apiWorlds.chapters.createInManuscript(s.manuscriptId, {
       chapterId,
       status: 'outline',
     });
-    const chs = await loadManuscriptChapters(s.worldId, s.manuscriptId);
+    const { chapters: chs } = await apiWorlds.chapters.list(s.manuscriptId);
     patch({ chaptersList: chs, chapterRowId: chapter.id, view: 'write', selectedNode: null });
     showToast('Chapter added');
-  }, [s.worldId, s.manuscriptId, loadManuscriptChapters, patch, showToast]);
+  }, [s.manuscriptId, patch, showToast]);
 
   const setChapterText = useCallback(
     (text: string) => {
@@ -272,6 +471,18 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     },
     [s.chapterRowId, autosave],
   );
+
+  // Force-persist the current chapter prose now, instead of waiting for the
+  // debounced autosave. flush() writes whatever is pending in the queue.
+  const saveDraft = useCallback(async () => {
+    if (!s.chapterRowId) return;
+    try {
+      await autosave.flush();
+      showToast('Draft saved');
+    } catch {
+      showToast('Save failed — will keep retrying');
+    }
+  }, [s.chapterRowId, autosave, showToast]);
 
   const setFormat = useCallback(
     (f: WritingFormat) => {
@@ -315,6 +526,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
             characterId: s.character === NARRATOR.id ? null : s.character,
             messages: history,
             targetChapterId: s.chapterRowId ?? '',
+            allowWebSearch: s.research && MODE_ALLOWS_RESEARCH(s.mode),
           },
           () => {
             /* could show live tokens; we reveal on done for parity with prototype */
@@ -325,7 +537,12 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
         if (done.kind === 'suggestion' && done.suggestion) {
           assistant = { ...base, kind: 'suggestion', sug: done.suggestion, status: 'pending' };
         } else {
-          assistant = { ...base, kind: done.kind === 'prose' ? 'prose' : 'text', text: done.text };
+          assistant = {
+            ...base,
+            kind: done.kind === 'prose' ? 'prose' : 'text',
+            text: done.text,
+            citations: done.citations,
+          };
         }
         setS((prev) => ({ ...prev, msgs: [...prev.msgs, assistant], thinking: false }));
       } catch (e) {
@@ -333,7 +550,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
         showToast(e instanceof Error ? e.message : 'generation failed');
       }
     },
-    [s.worldId, s.mode, s.character, s.msgs, s.chapterRowId, showToast],
+    [s.worldId, s.mode, s.character, s.msgs, s.chapterRowId, s.research, showToast],
   );
 
   const insertProse = useCallback(
@@ -423,35 +640,96 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     showToast(newEvents > 0 ? `Chat saved · ${newEvents} memory event(s)` : 'Chat saved');
   }, [s.worldId, s.msgs, s.mode, s.character, activeChapter, patch, showToast]);
 
+  // Start a fresh conversation. Chat is client-state (unsaved until Save Chat),
+  // so clearing without saving discards the current transcript — hence the toast.
+  const clearChat = useCallback(() => {
+    if (s.msgs.length === 0) return;
+    patch({ msgs: [], thinking: false });
+    showToast('Chat cleared');
+  }, [s.msgs.length, patch, showToast]);
+
+  // ── world document editing (persisted by Save World) ──
+  const editWorldField = useCallback(
+    (path: string, value: unknown) => {
+      setS((prev) => {
+        if (!prev.world) return prev;
+        const draft = structuredClone(prev.world);
+        setByPath(draft, path, value);
+        draft.world.identity.lastModified = new Date().toISOString();
+        return { ...prev, world: draft };
+      });
+    },
+    [],
+  );
+
+  const addWorldEntity = useCallback(
+    (kind: AddableKind) => {
+      setS((prev) => {
+        if (!prev.world) return prev;
+        const { doc, nodeKey } = addEntity(prev.world, kind);
+        return { ...prev, world: doc, selectedNode: nodeKey, view: 'world', navMode: 'world' };
+      });
+      showToast('Added — remember to Save World');
+    },
+    [showToast],
+  );
+
+  const deleteWorldNode = useCallback(
+    (key: string) => {
+      setS((prev) => {
+        if (!prev.world) return prev;
+        return { ...prev, world: deleteEntity(prev.world, key), selectedNode: null, view: 'write' };
+      });
+      showToast('Deleted — remember to Save World');
+    },
+    [showToast],
+  );
+
   const value: StoreApi = {
     ...s,
     cast: castFor(s.world),
     activeChapter,
     setAuthed: (v) => patch({ authed: v }),
     refreshWorlds,
+    logout,
+    refreshCredentials,
+    addCredential,
+    removeCredential,
     openWorld,
     newWorld,
     saveWorld,
+    deleteWorld,
+    deleteManuscript,
+    openUnattached,
+    reassignManuscript,
+    unattachedCount: s.unattachedList.length,
     openManuscript,
     newManuscript,
+    renameManuscript,
     openChapter,
     newChapter,
     setChapterText,
+    saveDraft,
     setFormat,
     selectNode: (key) => patch({ selectedNode: key, view: key ? 'world' : 'write' }),
     goWrite: () => patch({ view: 'write', selectedNode: null }),
     setNavMode: (m) => patch({ navMode: m }),
+    editWorldField,
+    addWorldEntity,
+    deleteWorldNode,
     setAccent,
     setProseTypeface: (t) => patch({ proseTypeface: t }),
     setCharacter: (id) => patch({ character: id }),
     setMode: (m) => patch({ mode: m }),
     setCfg: (mode, key, val) =>
       setS((prev) => ({ ...prev, cfg: { ...prev.cfg, [mode]: { ...prev.cfg[mode], [key]: val } } })),
+    setResearch: (on) => patch({ research: on }),
     send: runGenerate,
     insertProse,
     acceptSuggestion,
     rejectSuggestion,
     saveChat,
+    clearChat,
     showToast,
   };
 

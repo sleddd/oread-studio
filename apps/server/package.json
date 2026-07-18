@@ -14,11 +14,13 @@
     "db:migrate": "tsx src/db/cli.ts migrate"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock": "^3.1090.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1090.0",
     "@fastify/cookie": "^10.0.0",
     "@fastify/cors": "^10.0.0",
     "@fastify/rate-limit": "^10.0.0",
-    "@oread/shared": "*",
     "@node-rs/argon2": "^2.0.0",
+    "@oread/shared": "*",
     "ajv": "^8.17.0",
     "fast-json-patch": "^3.1.1",
     "fastify": "^5.0.0",

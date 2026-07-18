@@ -44,7 +44,11 @@ export interface DiscussConfig {
   mayProposeCanon: boolean;
 }
 
-export interface ModeConfigBase {
+/**
+ * ONE model/credential setting for the whole world (chosen once). Every mode
+ * uses it. The per-mode configs below carry only BEHAVIORAL settings.
+ */
+export interface ModelSettings {
   /** pointer into the per-user credentials table; resolved+decrypted server-side */
   credentialId: string | null;
   provider: 'anthropic' | 'openai' | 'bedrock' | 'cloudflare' | 'local' | null;
@@ -52,11 +56,11 @@ export interface ModeConfigBase {
   temperature: number;
 }
 
-export type CowriteModeConfig = ModeConfigBase & CowriteConfig;
-export type DraftModeConfig = ModeConfigBase & DraftConfig;
-export type EditModeConfig = ModeConfigBase & EditConfig;
-export type CritiqueModeConfig = ModeConfigBase & CritiqueConfig;
-export type DiscussModeConfig = ModeConfigBase & DiscussConfig;
+export type CowriteModeConfig = CowriteConfig;
+export type DraftModeConfig = DraftConfig;
+export type EditModeConfig = EditConfig;
+export type CritiqueModeConfig = CritiqueConfig;
+export type DiscussModeConfig = DiscussConfig;
 
 export interface ModeConfigs {
   cowrite: CowriteModeConfig;
@@ -90,6 +94,8 @@ export interface LinguisticFilters {
 
 export interface WorldSession {
   defaultMode: ChatMode;
+  /** single model/credential for the whole world — used by every mode */
+  model: ModelSettings;
   modeConfigs: ModeConfigs;
   memoryWriteback: MemoryWriteback;
   contextRecipes: ContextRecipes;
@@ -98,6 +104,13 @@ export interface WorldSession {
   styleNotes: string;
   linguisticFilters: LinguisticFilters;
 }
+
+export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
+  credentialId: null,
+  provider: null,
+  model: null,
+  temperature: 0.85,
+};
 
 // ─── canonical defaults (mirror the prototype) ──────────────
 export const DEFAULT_CONTEXT_RECIPES: ContextRecipes = {

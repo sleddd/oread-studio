@@ -76,6 +76,15 @@ export interface WorldStore {
 
   // ── manuscripts ──
   listManuscripts(ctx: StoreCtx, worldId: string): Promise<ManuscriptRow[]>;
+  getManuscript(ctx: StoreCtx, manuscriptId: string): Promise<ManuscriptRow | null>;
+  /** Manuscripts with no world (detached). */
+  listUnattachedManuscripts(ctx: StoreCtx): Promise<ManuscriptRow[]>;
+  /** Move a manuscript (and its chapters) to a world, or to null (unattach). */
+  reassignManuscript(
+    ctx: StoreCtx,
+    manuscriptId: string,
+    worldId: string | null,
+  ): Promise<void>;
   createManuscript(
     ctx: StoreCtx,
     worldId: string,
@@ -94,6 +103,12 @@ export interface WorldStore {
   createChapter(
     ctx: StoreCtx,
     worldId: string,
+    manuscriptId: string,
+    input: CreateChapterInput,
+  ): Promise<ChapterRow>;
+  /** Create a chapter under a manuscript, inheriting the manuscript's world_id (may be null). */
+  createChapterInManuscript(
+    ctx: StoreCtx,
     manuscriptId: string,
     input: CreateChapterInput,
   ): Promise<ChapterRow>;

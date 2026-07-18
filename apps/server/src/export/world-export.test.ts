@@ -37,16 +37,16 @@ test('world.json export includes manuscripts + chapters', async () => {
 
 test('export leaves credentialId dangling and strips any key material', async () => {
   const doc = emptyWorld('W');
-  // Simulate a configured credential + a smuggled raw key.
-  (doc.world.session.modeConfigs.cowrite as unknown as Record<string, unknown>).credentialId = 'cred_123';
-  (doc.world.session.modeConfigs.cowrite as unknown as Record<string, unknown>).apiKey = 'sk-ant-should-not-export';
+  // Simulate a configured credential + a smuggled raw key on the single model.
+  doc.world.session.model.credentialId = 'cred_123';
+  (doc.world.session.model as unknown as Record<string, unknown>).apiKey = 'sk-ant-should-not-export';
   const wid = await store.createWorld(ctx, 'W', doc);
 
   const out = await buildWorldExport(store, ctx, wid);
   const serialized = JSON.stringify(out);
   assert.ok(!serialized.includes('sk-ant-should-not-export'), 'no raw key in export');
   assert.equal(
-    (out!.world.world.session.modeConfigs.cowrite as unknown as Record<string, unknown>).credentialId,
+    out!.world.world.session.model.credentialId,
     null,
     'credentialId nulled to a dangling reference',
   );

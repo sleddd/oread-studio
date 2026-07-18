@@ -33,53 +33,103 @@ export function WorldPicker({ onClose }: { onClose: () => void }): JSX.Element {
       {store.worldList.map((w) => {
         const active = w.id === store.worldId;
         return (
-          <button
+          <div
             key={w.id}
-            onClick={() => {
-              void store.openWorld(w.id);
-              onClose();
-            }}
             style={{
-              width: '100%',
               display: 'flex',
               alignItems: 'center',
-              gap: 10,
-              padding: '9px 10px',
               borderRadius: 9,
-              textAlign: 'left',
               background: active ? 'rgba(46,157,157,0.14)' : 'transparent',
             }}
           >
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: active ? 'var(--accent,#2e9d9d)' : '#333a3a',
-                flex: '0 0 auto',
+            <button
+              onClick={() => {
+                void store.openWorld(w.id);
+                onClose();
               }}
-            />
-            <span style={{ minWidth: 0 }}>
+              style={{
+                flex: '1 1 auto',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '9px 10px',
+                borderRadius: 9,
+                textAlign: 'left',
+                background: 'transparent',
+                minWidth: 0,
+              }}
+            >
               <span
                 style={{
-                  display: 'block',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: '#e9ecea',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: active ? 'var(--accent,#2e9d9d)' : '#333a3a',
+                  flex: '0 0 auto',
                 }}
-              >
-                {w.name}
+              />
+              <span style={{ minWidth: 0 }}>
+                <span
+                  style={{
+                    display: 'block',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: '#e9ecea',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {w.name}
+                </span>
+                <span style={{ fontSize: 11.5, color: '#6d7473' }}>
+                  {w.manuscriptCount} manuscript{w.manuscriptCount === 1 ? '' : 's'}
+                </span>
               </span>
-              <span style={{ fontSize: 11.5, color: '#6d7473' }}>
-                {w.manuscriptCount} manuscript{w.manuscriptCount === 1 ? '' : 's'}
-              </span>
-            </span>
-          </button>
+            </button>
+            <button
+              title="Delete world"
+              onClick={() => {
+                if (confirm(`Delete world “${w.name}”? This removes its manuscripts, chapters, and chats permanently.`)) {
+                  void store.deleteWorld(w.id);
+                }
+              }}
+              style={{ flex: '0 0 auto', color: '#6d7473', fontSize: 15, padding: '0 10px' }}
+            >
+              ×
+            </button>
+          </div>
         );
       })}
+      {store.unattachedCount > 0 && (
+        <button
+          onClick={() => {
+            void store.openUnattached();
+            onClose();
+          }}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '9px 10px',
+            borderRadius: 9,
+            textAlign: 'left',
+            marginTop: 2,
+            background: store.unattachedView ? 'rgba(46,157,157,0.14)' : 'transparent',
+          }}
+        >
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#333a3a', flex: '0 0 auto' }} />
+          <span style={{ minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: '#aeb4b2' }}>
+              Unattached manuscripts
+            </span>
+            <span style={{ fontSize: 11.5, color: '#6d7473' }}>
+              {store.unattachedCount} without a world
+            </span>
+          </span>
+        </button>
+      )}
       <button
         onClick={() => {
           void store.newWorld();

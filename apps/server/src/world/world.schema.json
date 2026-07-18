@@ -233,11 +233,24 @@
         },
         "session": {
           "type": "object",
-          "required": ["defaultMode", "modeConfigs"],
+          "required": ["defaultMode", "model", "modeConfigs"],
           "additionalProperties": true,
           "properties": {
             "defaultMode": {
               "enum": ["cowrite", "draft", "edit", "critique", "discuss"]
+            },
+            "model": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "credentialId": { "type": ["string", "null"] },
+                "provider": {
+                  "type": ["string", "null"],
+                  "enum": ["anthropic", "openai", "bedrock", "cloudflare", "local", null]
+                },
+                "model": { "type": ["string", "null"] },
+                "temperature": { "type": "number" }
+              }
             },
             "modeConfigs": { "type": "object" }
           }

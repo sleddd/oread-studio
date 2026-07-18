@@ -8,7 +8,10 @@ import {
   listCredentials,
   createCredential,
   deleteCredential,
+  resolveAuth,
 } from '../credentials/store.js';
+import { getAdapter } from '../ai/adapters/index.js';
+import { PROVIDER_MODELS } from '@oread/shared';
 
 const PROVIDERS: Provider[] = ['anthropic', 'openai', 'bedrock', 'cloudflare', 'local'];
 
@@ -67,5 +70,29 @@ export async function credentialRoutes(app: FastifyInstance): Promise<void> {
     if (!req.auth) return reply.code(401).send({ error: 'unauthenticated' });
     await deleteCredential({ schemaName: req.auth.user.schemaName }, req.params.id);
     return reply.send({ ok: true });
+  });
+
+  // Live model list for a credential's provider. Falls back to the curated
+  // catalog if the provider has no list API or the call fails.
+  app.get<{ Params: { id: string } }>('/api/credentials/:id/models', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthenticated' });
+    const ctx = { schemaName: req.auth.user.schemaName };
+    const resolved = await resolveAuth(ctx, req.params.id);
+    if (!resolved) return reply.code(404).send({ error: 'credential not found' });
+    const adapter = getAdapter(resolved.provider);
+    const fallback = PROVIDER_MODELS[resolved.provider].map((m) => ({ id: m.id, label: m.label }));
+    if (!adapter.listModels) {
+      return reply.send({ models: fallback, source: 'curated' });
+    }
+    try {
+      const models = await adapter.listModels(resolved.auth);
+      return reply.send({
+        models: models.length ? models : fallback,
+        source: models.length ? 'live' : 'curated',
+      });
+    } catch (e) {
+      req.log.warn(e);
+      return reply.send({ models: fallback, source: 'curated' });
+    }
   });
 }

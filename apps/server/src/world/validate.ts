@@ -29,16 +29,20 @@ export class WorldValidationError extends Error {
 function crossFieldErrors(doc: WorldDocument): string[] {
   const errs: string[] = [];
   const configs = doc.world.session?.modeConfigs;
+  const scopes: Array<[string, Record<string, unknown> | undefined]> = [
+    ['session.model', doc.world.session?.model as unknown as Record<string, unknown> | undefined],
+  ];
   if (configs) {
     for (const [mode, cfg] of Object.entries(configs)) {
-      const c = cfg as Record<string, unknown>;
-      // NEVER a raw key in the world document — only a credentialId pointer.
-      for (const suspect of ['apiKey', 'key', 'secret', 'token']) {
-        if (typeof c[suspect] === 'string' && (c[suspect] as string).length > 0) {
-          errs.push(
-            `session.modeConfigs.${mode}.${suspect} must not contain raw key material — use credentialId`,
-          );
-        }
+      scopes.push([`session.modeConfigs.${mode}`, cfg as unknown as Record<string, unknown>]);
+    }
+  }
+  for (const [where, c] of scopes) {
+    if (!c) continue;
+    // NEVER a raw key in the world document — only a credentialId pointer.
+    for (const suspect of ['apiKey', 'key', 'secret', 'token']) {
+      if (typeof c[suspect] === 'string' && (c[suspect] as string).length > 0) {
+        errs.push(`${where}.${suspect} must not contain raw key material — use credentialId`);
       }
     }
   }

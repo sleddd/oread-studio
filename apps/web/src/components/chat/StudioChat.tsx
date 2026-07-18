@@ -17,6 +17,8 @@ export function StudioChat({ onCollapse }: { onCollapse: () => void }): JSX.Elem
 
   const activeChar = store.cast.find((c) => c.id === store.character) ?? store.cast[store.cast.length - 1]!;
   const activeMode = MODES.find((m) => m.key === store.mode)!;
+  // Web research is offered only in Discuss and Draft (mirrors server contract).
+  const canResearch = store.mode === 'discuss' || store.mode === 'draft';
   const chapterTitle =
     store.world?.world.structure.chapters.find((c) => c.id === store.activeChapter?.chapter_id)?.title ??
     'this chapter';
@@ -260,11 +262,12 @@ export function StudioChat({ onCollapse }: { onCollapse: () => void }): JSX.Elem
                 doSend();
               }
             }}
-            rows={2}
+            rows={4}
             placeholder={composerPlaceholder(store.mode, activeChar.name)}
             style={{
               width: '100%',
-              resize: 'none',
+              minHeight: 88,
+              resize: 'vertical',
               background: 'transparent',
               border: 'none',
               fontSize: 14.5,
@@ -272,11 +275,66 @@ export function StudioChat({ onCollapse }: { onCollapse: () => void }): JSX.Elem
               color: '#e9ecea',
             }}
           />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-            <span style={{ fontSize: 11, color: '#4f5655' }}>
-              {activeChar.name} · {activeMode.label}
-            </span>
+          {/* action row: Research toggle (left) · Clear / Save Chat / Send (right) */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+              marginTop: 6,
+            }}
+          >
+            {canResearch ? (
+              <button
+                onClick={() => store.setResearch(!store.research)}
+                title={
+                  store.research
+                    ? 'Web research on — the AI may search for real facts and cite them'
+                    : 'Web research off'
+                }
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  flex: '0 0 auto',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  borderRadius: 8,
+                  padding: '4px 8px',
+                  background: store.research ? 'var(--accent,#2e9d9d)' : '#141818',
+                  color: store.research ? '#04201f' : '#7d8382',
+                  border: store.research ? undefined : '1px solid #262b2b',
+                }}
+              >
+                <span style={{ fontSize: 12 }}>🔎</span>
+                Research
+              </button>
+            ) : (
+              <span />
+            )}
             <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => {
+                  if (store.msgs.length === 0) return;
+                  if (confirm('Clear this conversation? Unsaved messages are discarded. Use Save Chat first to keep them.')) {
+                    store.clearChat();
+                  }
+                }}
+                disabled={store.msgs.length === 0}
+                title="Start a fresh chat"
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: store.msgs.length === 0 ? '#4f5655' : '#9aa19f',
+                  border: '1px solid #262b2b',
+                  borderRadius: 9,
+                  padding: '5px 11px',
+                  cursor: store.msgs.length === 0 ? 'default' : 'pointer',
+                }}
+              >
+                Clear
+              </button>
               <button
                 onClick={() => void store.saveChat()}
                 style={{
@@ -285,7 +343,7 @@ export function StudioChat({ onCollapse }: { onCollapse: () => void }): JSX.Elem
                   color: '#9aa19f',
                   border: '1px solid #262b2b',
                   borderRadius: 9,
-                  padding: '7px 12px',
+                  padding: '5px 11px',
                 }}
               >
                 Save Chat
@@ -298,7 +356,7 @@ export function StudioChat({ onCollapse }: { onCollapse: () => void }): JSX.Elem
                   color: '#04201f',
                   background: 'var(--accent,#2e9d9d)',
                   borderRadius: 9,
-                  padding: '7px 16px',
+                  padding: '5px 15px',
                 }}
               >
                 Send

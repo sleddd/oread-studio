@@ -28,6 +28,8 @@ interface GenerateBody {
   characterId: string | null;
   messages: ChatTurn[];
   targetChapterId: string; // the chapter row uuid
+  /** user opted into web research for this turn (gated server-side by mode) */
+  allowWebSearch?: boolean;
 }
 
 interface ApplyBody {
@@ -74,12 +76,14 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
         messages: body.messages,
         targetChapterId: body.targetChapterId,
         targetChapterText: targetText,
+        allowWebSearch: body.allowWebSearch,
         onDelta: (t) => sse('delta', { text: t }),
       });
       sse('done', {
         kind: out.kind,
         text: out.text,
         suggestion: out.suggestion,
+        citations: out.citations,
         usedMock: out.usedMock,
         includedContext: out.includedContext,
         droppedContext: out.droppedContext,

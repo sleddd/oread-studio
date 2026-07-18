@@ -86,8 +86,8 @@ export async function distillChat(input: DistillInput): Promise<MemoryEvent[]> {
   const transcript = transcriptText(input.messages);
   if (!transcript.trim()) return [];
 
-  // Resolve the distill credential from the discuss mode config (cheap model).
-  const credId = input.world.world.session.modeConfigs.discuss?.credentialId ?? null;
+  // Resolve the distill credential from the world's model setting (cheap model).
+  const credId = input.world.world.session.model?.credentialId ?? null;
   const resolved = credId ? await resolveAuth(input.ctx, credId) : null;
 
   let events: MemoryEvent[] = [];

@@ -7,6 +7,7 @@ import type {
   GenerateRequest,
   GenerateResult,
   ProviderAuth,
+  ModelInfo,
 } from '../provider.js';
 import { ProviderError } from '../provider.js';
 import { parseSSE } from '../sse.js';
@@ -27,6 +28,15 @@ function messages(req: GenerateRequest) {
 
 export class OpenAIAdapter implements ProviderAdapter {
   readonly provider = 'openai' as const;
+
+  async listModels(auth: ProviderAuth): Promise<ModelInfo[]> {
+    const res = await fetch('https://api.openai.com/v1/models', {
+      headers: { authorization: `Bearer ${auth.secret ?? ''}` },
+    });
+    if (!res.ok) throw new ProviderError(`OpenAI models ${res.status}`, res.status);
+    const json = (await res.json()) as { data: { id: string }[] };
+    return json.data.map((m) => ({ id: m.id })).sort((a, b) => a.id.localeCompare(b.id));
+  }
 
   async generate(req: GenerateRequest, auth: ProviderAuth): Promise<GenerateResult> {
     const res = await fetch(BASE, {

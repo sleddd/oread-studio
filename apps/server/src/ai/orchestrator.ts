@@ -11,6 +11,7 @@ import type {
   WorldDocument,
   PersistedChatMode,
   Suggestion,
+  WebCitation,
 } from '@oread/shared';
 import type { StoreCtx } from '../storage/types.js';
 import { resolveAuth } from '../credentials/store.js';
@@ -34,6 +35,8 @@ export interface GenerateParams {
   targetChapterId: string;
   targetChapterText?: string;
   recentScenes?: string[];
+  /** user asked the model to research the web this turn (gated by mode contract) */
+  allowWebSearch?: boolean;
   /** streaming sink; if omitted, non-streaming */
   onDelta?: (t: string) => void;
 }
@@ -44,26 +47,25 @@ export interface GenerateOutput {
   text?: string;
   /** edit/critique suggestion */
   suggestion?: Suggestion;
+  /** web sources the model consulted, if research ran */
+  citations?: WebCitation[];
   /** whether a real provider or the mock produced this */
   usedMock: boolean;
   includedContext: string[];
   droppedContext: string[];
 }
 
-function modeCredentialId(world: WorldDocument, mode: PersistedChatMode): string | null {
-  const base = baseMode(mode);
-  const cfg = world.world.session.modeConfigs[base];
-  return cfg?.credentialId ?? null;
+// One model/credential for the whole world (session.model), used by every mode.
+function worldCredentialId(world: WorldDocument): string | null {
+  return world.world.session.model?.credentialId ?? null;
 }
 
-function modeModel(world: WorldDocument, mode: PersistedChatMode): string | null {
-  const base = baseMode(mode);
-  return world.world.session.modeConfigs[base]?.model ?? null;
+function worldModel(world: WorldDocument): string | null {
+  return world.world.session.model?.model ?? null;
 }
 
-function modeTemperature(world: WorldDocument, mode: PersistedChatMode): number {
-  const base = baseMode(mode);
-  return world.world.session.modeConfigs[base]?.temperature ?? 0.85;
+function worldTemperature(world: WorldDocument): number {
+  return world.world.session.model?.temperature ?? 0.85;
 }
 
 /** Parse a suggestion from model text. Accepts a JSON block or falls back to a flag. */
@@ -113,6 +115,10 @@ export async function generate(params: GenerateParams): Promise<GenerateOutput> 
     recentScenes: params.recentScenes,
   });
 
+  // Web search is only offered to modes whose contract permits research, and
+  // only when the user opted in for this turn.
+  const useWebSearch = !!params.allowWebSearch && contract.mayResearch;
+
   // Add a structured-output instruction for suggestion modes.
   let system = assembled.system;
   if (contract.output === 'suggestion') {
@@ -122,8 +128,15 @@ export async function generate(params: GenerateParams): Promise<GenerateOutput> 
       '"proposed": string|null, "rationale": string }. ' +
       'Output ONLY the JSON object.';
   }
+  if (useWebSearch) {
+    system +=
+      '\n\nYou may search the web to ground your answer in real-world facts ' +
+      '(places, history, science, current information). Search only when it ' +
+      'materially improves accuracy, and cite what you use. Do not let web ' +
+      'facts override established world canon.';
+  }
 
-  const credentialId = modeCredentialId(world, mode);
+  const credentialId = worldCredentialId(world);
   const resolved = credentialId ? await resolveAuth(params.ctx, credentialId) : null;
 
   // ── Mock fallback (no credential configured) ──
@@ -143,12 +156,13 @@ export async function generate(params: GenerateParams): Promise<GenerateOutput> 
 
   // ── Real provider ──
   const adapter = getAdapter(resolved.provider);
-  const model = modeModel(world, mode) ?? defaultModelFor(resolved.provider);
+  const model = worldModel(world) ?? defaultModelFor(resolved.provider);
   const req = {
     model,
     system,
     messages: params.messages,
-    temperature: modeTemperature(world, mode),
+    temperature: worldTemperature(world),
+    webSearch: useWebSearch,
   };
 
   const result = params.onDelta
@@ -163,7 +177,14 @@ export async function generate(params: GenerateParams): Promise<GenerateOutput> 
   }
 
   const kind: OutputKind = contract.output; // 'prose' or 'text'
-  const out: GenerateOutput = { kind, text: result.text, usedMock: false, includedContext: assembled.includedItems, droppedContext: assembled.droppedItems };
+  const out: GenerateOutput = {
+    kind,
+    text: result.text,
+    citations: result.citations,
+    usedMock: false,
+    includedContext: assembled.includedItems,
+    droppedContext: assembled.droppedItems,
+  };
   assertResultAllowed(mode, out.kind);
   return out;
 }
@@ -177,7 +198,8 @@ function defaultModelFor(provider: string): string {
     case 'cloudflare':
       return '@cf/meta/llama-3.1-8b-instruct';
     case 'bedrock':
-      return 'anthropic.claude-3-5-sonnet-20241022-v2:0';
+      // Inference profile id — bare model ids are rejected for on-demand invoke.
+      return 'us.anthropic.claude-sonnet-4-6';
     case 'local':
       return 'llama3.1';
     default:

@@ -91,6 +91,24 @@ export function WriteView(): JSX.Element {
             </div>
             <div style={{ fontSize: 11, color: '#5f6664' }}>words</div>
           </div>
+          <div style={{ width: 1, height: 34, background: '#1e2222' }} />
+          <button
+            onClick={() => void store.saveDraft()}
+            disabled={!chapter}
+            title="Save this chapter now (also autosaves as you type)"
+            style={{
+              fontSize: 13.5,
+              fontWeight: 700,
+              color: '#04201f',
+              background: 'var(--accent,#2e9d9d)',
+              borderRadius: 9,
+              padding: '8px 16px',
+              opacity: chapter ? 1 : 0.5,
+              cursor: chapter ? 'pointer' : 'default',
+            }}
+          >
+            Save Draft
+          </button>
         </div>
       </div>
       <div

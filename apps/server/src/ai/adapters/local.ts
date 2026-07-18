@@ -8,6 +8,7 @@ import type {
   GenerateRequest,
   GenerateResult,
   ProviderAuth,
+  ModelInfo,
 } from '../provider.js';
 import { ProviderError } from '../provider.js';
 import { env } from '../../env.js';
@@ -25,6 +26,13 @@ function messages(req: GenerateRequest) {
 
 export class LocalAdapter implements ProviderAdapter {
   readonly provider = 'local' as const;
+
+  async listModels(auth: ProviderAuth): Promise<ModelInfo[]> {
+    const res = await fetch(`${base(auth)}/api/tags`);
+    if (!res.ok) throw new ProviderError(`Ollama models ${res.status}`, res.status);
+    const json = (await res.json()) as { models?: { name: string }[] };
+    return (json.models ?? []).map((m) => ({ id: m.name }));
+  }
 
   async generate(req: GenerateRequest, auth: ProviderAuth): Promise<GenerateResult> {
     const res = await fetch(`${base(auth)}/api/chat`, {

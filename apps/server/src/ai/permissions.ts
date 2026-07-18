@@ -22,6 +22,8 @@ export interface ModeContract {
   protectCanon: boolean;
   /** may the model invent new plot/canon? */
   mayInventPlot: boolean;
+  /** may the model research the live web (native web-search tool) in this mode? */
+  mayResearch: boolean;
   /** what this mode may write back to memory */
   memoryWriteback: 'events' | 'events+chapterStatus' | 'decisions-if-structural' | 'nothing' | 'decisions+canon-with-user-confirmation';
 }
@@ -32,6 +34,7 @@ export const MODE_CONTRACTS: Record<ChatMode, ModeContract> = {
     applicable: false,
     protectCanon: false,
     mayInventPlot: false,
+    mayResearch: true, // grounding facts, research focus, real places/history
     memoryWriteback: 'decisions+canon-with-user-confirmation',
   },
   cowrite: {
@@ -39,6 +42,7 @@ export const MODE_CONTRACTS: Record<ChatMode, ModeContract> = {
     applicable: true,
     protectCanon: true,
     mayInventPlot: true,
+    mayResearch: false, // in-scene prose, not research
     memoryWriteback: 'events',
   },
   draft: {
@@ -46,6 +50,7 @@ export const MODE_CONTRACTS: Record<ChatMode, ModeContract> = {
     applicable: true,
     protectCanon: true,
     mayInventPlot: false, // draft may not contradict canon; invents detail, not plot
+    mayResearch: true, // may ground a scene in real places/history/science
     memoryWriteback: 'events+chapterStatus',
   },
   edit: {
@@ -53,6 +58,7 @@ export const MODE_CONTRACTS: Record<ChatMode, ModeContract> = {
     applicable: true, // edit suggestions CAN be applied on accept
     protectCanon: true,
     mayInventPlot: false, // edit may not invent plot
+    mayResearch: false, // works on the user's own text
     memoryWriteback: 'decisions-if-structural',
   },
   critique: {
@@ -60,6 +66,7 @@ export const MODE_CONTRACTS: Record<ChatMode, ModeContract> = {
     applicable: false, // critique applies NOTHING
     protectCanon: true,
     mayInventPlot: false,
+    mayResearch: false, // works on the user's own text
     memoryWriteback: 'nothing',
   },
 };

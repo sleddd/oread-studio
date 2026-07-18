@@ -183,6 +183,48 @@ export class PostgresStore implements WorldStore {
     });
   }
 
+  async getManuscript(ctx: StoreCtx, manuscriptId: string): Promise<ManuscriptRow | null> {
+    return withUserSchema(ctx.schemaName, async (c) => {
+      const { rows } = await c.query<ManuscriptRow>('SELECT * FROM manuscripts WHERE id = $1', [
+        manuscriptId,
+      ]);
+      return rows[0] ?? null;
+    });
+  }
+
+  async listUnattachedManuscripts(ctx: StoreCtx): Promise<ManuscriptRow[]> {
+    return withUserSchema(ctx.schemaName, async (c) => {
+      const { rows } = await c.query<ManuscriptRow>(
+        'SELECT * FROM manuscripts WHERE world_id IS NULL ORDER BY "order" ASC, created_at ASC',
+      );
+      return rows;
+    });
+  }
+
+  async reassignManuscript(
+    ctx: StoreCtx,
+    manuscriptId: string,
+    worldId: string | null,
+  ): Promise<void> {
+    await withUserSchema(ctx.schemaName, async (c) => {
+      await c.query('BEGIN');
+      try {
+        await c.query('UPDATE manuscripts SET world_id = $1, updated_at = now() WHERE id = $2', [
+          worldId,
+          manuscriptId,
+        ]);
+        await c.query('UPDATE chapters SET world_id = $1, updated_at = now() WHERE manuscript_id = $2', [
+          worldId,
+          manuscriptId,
+        ]);
+        await c.query('COMMIT');
+      } catch (e) {
+        await c.query('ROLLBACK');
+        throw e;
+      }
+    });
+  }
+
   async createManuscript(
     ctx: StoreCtx,
     worldId: string,
@@ -268,6 +310,25 @@ export class PostgresStore implements WorldStore {
            COALESCE((SELECT max("order") + 1 FROM chapters WHERE manuscript_id = $2), 0))
          RETURNING *`,
         [worldId, manuscriptId, input.chapterId, content, countWords(content), input.status ?? 'outline'],
+      );
+      return rows[0]!;
+    });
+  }
+
+  async createChapterInManuscript(
+    ctx: StoreCtx,
+    manuscriptId: string,
+    input: CreateChapterInput,
+  ): Promise<ChapterRow> {
+    return withUserSchema(ctx.schemaName, async (c) => {
+      const content = input.content ?? '';
+      const { rows } = await c.query<ChapterRow>(
+        `INSERT INTO chapters (world_id, manuscript_id, chapter_id, content, word_count, status, "order")
+         SELECT m.world_id, m.id, $2, $3, $4, $5,
+           COALESCE((SELECT max("order") + 1 FROM chapters WHERE manuscript_id = m.id), 0)
+         FROM manuscripts m WHERE m.id = $1
+         RETURNING *`,
+        [manuscriptId, input.chapterId, content, countWords(content), input.status ?? 'outline'],
       );
       return rows[0]!;
     });

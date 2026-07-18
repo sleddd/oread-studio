@@ -38,6 +38,8 @@ function toPublic(u: UserRow): PublicUser {
 }
 
 export class SignupError extends Error {}
+/** Signup rejected by policy (e.g. not on the allow-list) → HTTP 403. */
+export class SignupForbiddenError extends SignupError {}
 
 /**
  * Create a user and provision their schema in one transaction.
@@ -52,6 +54,12 @@ export async function signup(params: {
   const name = params.name.trim();
   if (!email || !name || !params.password) {
     throw new SignupError('email, name and password are required');
+  }
+  // Signup allow-list: when SIGNUP_WHITELIST is set, only listed emails may
+  // register. An empty/unset list leaves signup open.
+  const whitelist = env.signupWhitelist;
+  if (whitelist.length > 0 && !whitelist.includes(email)) {
+    throw new SignupForbiddenError('This email is not permitted to sign up');
   }
   const passwordHash = await hashPassword(params.password);
 
@@ -149,6 +157,38 @@ export async function touchLastLogin(userId: string): Promise<void> {
   await getPool().query(
     'UPDATE public.users SET last_login_at = now() WHERE id = $1',
     [userId],
+  );
+}
+
+export class PasswordChangeError extends Error {}
+
+/**
+ * Change a logged-in user's password: verify the current password, then store
+ * the new hash. Revokes all OTHER sessions so a stolen session can't linger
+ * after a password change (the current session stays valid).
+ */
+export async function changePassword(params: {
+  userId: string;
+  currentPassword: string;
+  newPassword: string;
+  keepSessionId: string;
+}): Promise<void> {
+  if (params.newPassword.length < 8) {
+    throw new PasswordChangeError('New password must be at least 8 characters');
+  }
+  const user = await findUserById(params.userId);
+  if (!user) throw new PasswordChangeError('user not found');
+  const ok = await verifyPassword(user.password_hash, params.currentPassword);
+  if (!ok) throw new PasswordChangeError('Current password is incorrect');
+  const newHash = await hashPassword(params.newPassword);
+  await getPool().query('UPDATE public.users SET password_hash = $1 WHERE id = $2', [
+    newHash,
+    params.userId,
+  ]);
+  // Invalidate every other session for this user.
+  await getPool().query(
+    'DELETE FROM public.sessions WHERE user_id = $1 AND id <> $2',
+    [params.userId, params.keepSessionId],
   );
 }
 

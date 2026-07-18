@@ -96,6 +96,13 @@ export function Header(): JSX.Element {
             </button>
             {settingsOpen && <SettingsPopover onClose={() => setSettingsOpen(false)} />}
           </div>
+          <button
+            onClick={() => void store.logout()}
+            title="Log out"
+            style={{ color: '#aeb4b2', fontSize: 14.5, fontWeight: 500 }}
+          >
+            Log out
+          </button>
         </nav>
       </header>
       {(settingsOpen || worldPickerOpen) && (

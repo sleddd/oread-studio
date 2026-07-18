@@ -18,11 +18,17 @@ export function worldSections(doc: WorldDocument | null): TreeSection[] {
   const w = doc?.world;
   if (!w) return [];
   return [
-    { label: 'Premise', items: [{ key: 'premise', label: 'Overview', type: 'premise' }] },
+    {
+      label: 'Premise',
+      items: [
+        { key: 'identity', label: 'Identity', type: 'identity' },
+        { key: 'premise', label: 'Overview', type: 'premise' },
+      ],
+    },
     {
       label: 'Setting',
       items: [
-        ...(w.setting.lore ? [{ key: 'lore', label: 'Lore & backdrop', type: 'lore' }] : []),
+        { key: 'lore', label: 'Lore & backdrop', type: 'lore' },
         ...w.setting.locations.map((l) => ({ key: `loc:${l.id}`, label: l.name, type: 'location' })),
         ...w.setting.rules.map((r) => ({ key: `rule:${r.id}`, label: r.statement.slice(0, 32), type: 'rule' })),
       ],

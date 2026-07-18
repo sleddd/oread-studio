@@ -35,15 +35,19 @@ function Root(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Once authed, load worlds and open the first (or create one).
+  // Once authed, load worlds and open the last-updated one (or create the first
+  // one ever). Decide from the freshly-fetched list — NOT store.worldList, which
+  // is the stale pre-fetch snapshot captured in this effect's closure.
   useEffect(() => {
     if (!store.authed) return;
     void (async () => {
-      await store.refreshWorlds();
-      if (store.worldList.length === 0) {
-        await store.newWorld();
-      } else if (!store.worldId) {
-        await store.openWorld(store.worldList[0]!.id);
+      await store.refreshCredentials();
+      const worlds = await store.refreshWorlds();
+      if (store.worldId) return; // a world is already open — don't clobber it
+      if (worlds.length === 0) {
+        await store.newWorld(); // brand-new account: seed the first world
+      } else {
+        await store.openWorld(worlds[0]!.id); // list is newest-first → last used
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
