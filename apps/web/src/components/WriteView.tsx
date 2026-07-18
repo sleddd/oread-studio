@@ -73,7 +73,7 @@ export function WriteView(): JSX.Element {
                 if (!chapter) return;
                 const next = prompt('Rename chapter', meta?.title ?? '');
                 if (next != null && next.trim() && next.trim() !== meta?.title) {
-                  store.renameChapter(chapter.id, next);
+                  void store.renameChapter(chapter.id, next);
                 }
               }}
               style={chapterActionStyle(!!chapter, 13)}

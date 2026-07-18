@@ -129,7 +129,7 @@ export interface StoreApi extends StoreState {
   renameManuscript: (mid: string, name: string) => Promise<void>;
   openChapter: (cid: string) => void;
   newChapter: () => Promise<void>;
-  renameChapter: (cid: string, title: string) => void;
+  renameChapter: (cid: string, title: string) => Promise<void>;
   deleteChapter: (cid: string) => Promise<void>;
   setChapterText: (text: string) => void;
   saveDraft: () => Promise<void>;
@@ -461,24 +461,40 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
   }, [s.manuscriptId, patch, showToast]);
 
   const renameChapter = useCallback(
-    (cid: string, title: string) => {
+    async (cid: string, title: string) => {
       const trimmed = title.trim();
-      if (!trimmed) return;
+      if (!trimmed || !s.world) return;
       const row = s.chaptersList.find((c) => c.id === cid);
       if (!row) return;
-      // Title lives in the world doc's chapter meta (keyed by chapter_id).
-      setS((prev) => {
-        if (!prev.world) return prev;
-        const draft = structuredClone(prev.world);
-        const meta = draft.world.structure.chapters.find((c) => c.id === row.chapter_id);
-        if (!meta) return prev;
+      // Title lives in the world doc's chapter meta (keyed by chapter_id). A
+      // freshly-created chapter has a DB row but no meta yet, so upsert one.
+      const draft = structuredClone(s.world);
+      const chapters = draft.world.structure.chapters;
+      const meta = chapters.find((c) => c.id === row.chapter_id);
+      if (meta) {
         meta.title = trimmed;
-        draft.world.identity.lastModified = new Date().toISOString();
-        return { ...prev, world: draft };
-      });
-      showToast('Chapter renamed — remember to Save World');
+      } else {
+        chapters.push({
+          id: row.chapter_id,
+          order: row.order ?? chapters.length,
+          title: trimmed,
+          status: row.status,
+          summary: '',
+          purpose: '',
+          povCharacter: '',
+          sceneIds: [],
+          wordCount: row.word_count ?? 0,
+        });
+      }
+      draft.world.identity.lastModified = new Date().toISOString();
+      patch({ world: draft });
+      // Persist immediately so the rename sticks without a separate Save World.
+      if (s.worldId) {
+        await apiWorlds.worlds.save(s.worldId, draft);
+      }
+      showToast('Chapter renamed');
     },
-    [s.chaptersList, showToast],
+    [s.world, s.worldId, s.chaptersList, patch, showToast],
   );
 
   const deleteChapter = useCallback(
