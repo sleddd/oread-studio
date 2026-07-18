@@ -2,6 +2,21 @@ import { useStore } from '../state/store.js';
 import { WRITING_FORMATS, FORMAT_SPECS, editorTypography } from '@oread/shared';
 import type { WritingFormat } from '@oread/shared';
 
+const chapterActionStyle = (enabled: boolean, fontSize: number) => ({
+  flex: '0 0 auto' as const,
+  color: '#6d7473',
+  fontSize,
+  borderRadius: 8,
+  border: '1px solid #1e2323',
+  background: '#131717',
+  padding: '0 9px',
+  height: 30,
+  display: 'flex',
+  alignItems: 'center',
+  opacity: enabled ? 1 : 0.4,
+  cursor: enabled ? 'pointer' : 'default',
+});
+
 export function WriteView(): JSX.Element {
   const store = useStore();
   const chapter = store.activeChapter;
@@ -36,19 +51,48 @@ export function WriteView(): JSX.Element {
           >
             Chapter · {status.charAt(0).toUpperCase() + status.slice(1)}
           </div>
-          <div
-            style={{
-              fontFamily: "'Newsreader',serif",
-              fontSize: 23,
-              fontWeight: 500,
-              color: '#eef0ef',
-              marginTop: 8,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {meta?.title ?? 'Untitled'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, minWidth: 0 }}>
+            <div
+              style={{
+                fontFamily: "'Newsreader',serif",
+                fontSize: 23,
+                fontWeight: 500,
+                color: '#eef0ef',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                minWidth: 0,
+              }}
+            >
+              {meta?.title ?? 'Untitled'}
+            </div>
+            <button
+              title="Rename chapter"
+              disabled={!chapter}
+              onClick={() => {
+                if (!chapter) return;
+                const next = prompt('Rename chapter', meta?.title ?? '');
+                if (next != null && next.trim() && next.trim() !== meta?.title) {
+                  store.renameChapter(chapter.id, next);
+                }
+              }}
+              style={chapterActionStyle(!!chapter, 13)}
+            >
+              ✎
+            </button>
+            <button
+              title="Delete chapter"
+              disabled={!chapter}
+              onClick={() => {
+                if (!chapter) return;
+                if (confirm(`Delete chapter “${meta?.title ?? 'Untitled'}”? Its prose is removed permanently.`)) {
+                  void store.deleteChapter(chapter.id);
+                }
+              }}
+              style={chapterActionStyle(!!chapter, 15)}
+            >
+              ×
+            </button>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flex: '0 0 auto' }}>

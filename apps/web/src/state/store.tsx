@@ -129,6 +129,8 @@ export interface StoreApi extends StoreState {
   renameManuscript: (mid: string, name: string) => Promise<void>;
   openChapter: (cid: string) => void;
   newChapter: () => Promise<void>;
+  renameChapter: (cid: string, title: string) => void;
+  deleteChapter: (cid: string) => Promise<void>;
   setChapterText: (text: string) => void;
   saveDraft: () => Promise<void>;
   setFormat: (f: WritingFormat) => void;
@@ -458,6 +460,57 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     showToast('Chapter added');
   }, [s.manuscriptId, patch, showToast]);
 
+  const renameChapter = useCallback(
+    (cid: string, title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed) return;
+      const row = s.chaptersList.find((c) => c.id === cid);
+      if (!row) return;
+      // Title lives in the world doc's chapter meta (keyed by chapter_id).
+      setS((prev) => {
+        if (!prev.world) return prev;
+        const draft = structuredClone(prev.world);
+        const meta = draft.world.structure.chapters.find((c) => c.id === row.chapter_id);
+        if (!meta) return prev;
+        meta.title = trimmed;
+        draft.world.identity.lastModified = new Date().toISOString();
+        return { ...prev, world: draft };
+      });
+      showToast('Chapter renamed — remember to Save World');
+    },
+    [s.chaptersList, showToast],
+  );
+
+  const deleteChapter = useCallback(
+    async (cid: string) => {
+      if (!s.manuscriptId) return;
+      await autosave.flush();
+      const row = s.chaptersList.find((c) => c.id === cid);
+      await apiWorlds.chapters.remove(cid);
+      const { chapters: chs } = await apiWorlds.chapters.list(s.manuscriptId);
+      setS((prev) => {
+        // Drop the chapter's meta from the world doc too (if attached).
+        let world = prev.world;
+        if (world && row) {
+          const draft = structuredClone(world);
+          draft.world.structure.chapters = draft.world.structure.chapters.filter(
+            (c) => c.id !== row.chapter_id,
+          );
+          world = draft;
+        }
+        const stillOpen = prev.chapterRowId && chs.some((c) => c.id === prev.chapterRowId);
+        return {
+          ...prev,
+          world,
+          chaptersList: chs,
+          chapterRowId: stillOpen ? prev.chapterRowId : chs[0]?.id ?? null,
+        };
+      });
+      showToast('Chapter deleted');
+    },
+    [s.manuscriptId, s.chaptersList, autosave, showToast],
+  );
+
   const setChapterText = useCallback(
     (text: string) => {
       if (!s.chapterRowId) return;
@@ -708,6 +761,8 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     renameManuscript,
     openChapter,
     newChapter,
+    renameChapter,
+    deleteChapter,
     setChapterText,
     saveDraft,
     setFormat,

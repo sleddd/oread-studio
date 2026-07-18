@@ -105,100 +105,53 @@ function OutlineTab(): JSX.Element {
   const chapterMeta = (chapterId: string) =>
     store.world?.world.structure.chapters.find((c) => c.id === chapterId);
 
-  const renameCurrent = () => {
-    if (!ms) return;
-    const name = prompt('Rename manuscript', ms.name);
-    if (name != null && name.trim() && name.trim() !== ms.name) {
-      void store.renameManuscript(ms.id, name);
-    }
-  };
-  const deleteCurrent = () => {
-    if (!ms) return;
-    const last = store.manuscriptsList.length === 1;
-    const msg = last
-      ? `Delete manuscript “${ms.name}”? Its chapters are removed permanently, and a fresh empty manuscript will replace it.`
-      : `Delete manuscript “${ms.name}”? Its chapters are removed permanently.`;
-    if (confirm(msg)) void store.deleteManuscript(ms.id);
-  };
-
-  const iconBtnStyle = {
-    flex: '0 0 auto' as const,
-    color: '#6d7473',
-    borderRadius: 8,
-    border: '1px solid #1e2323',
-    background: '#131717',
-    padding: '0 9px',
-    height: 30,
-    display: 'flex',
-    alignItems: 'center',
-  };
-
   return (
     <>
       <div style={{ position: 'relative', padding: '2px 4px 12px' }}>
-        <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
-          <button
-            onClick={() => setMsPickerOpen((v) => !v)}
-            style={{
-              flex: '1 1 auto',
-              minWidth: 0,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 9,
-              padding: '10px 11px',
-              borderRadius: 10,
-              background: '#131717',
-              border: '1px solid #1e2323',
-              textAlign: 'left',
-            }}
-          >
-            <span style={{ minWidth: 0, flex: '1 1 auto' }}>
-              <span
-                style={{
-                  display: 'block',
-                  fontSize: 10,
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  color: '#5f6664',
-                  fontWeight: 700,
-                }}
-              >
-                Manuscript
-              </span>
-              <span
-                style={{
-                  display: 'block',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: '#e9ecea',
-                  marginTop: 2,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {ms?.name ?? '—'}
-              </span>
+        <button
+          onClick={() => setMsPickerOpen((v) => !v)}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 9,
+            padding: '10px 11px',
+            borderRadius: 10,
+            background: '#131717',
+            border: '1px solid #1e2323',
+            textAlign: 'left',
+          }}
+        >
+          <span style={{ minWidth: 0, flex: '1 1 auto' }}>
+            <span
+              style={{
+                display: 'block',
+                fontSize: 10,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                color: '#5f6664',
+                fontWeight: 700,
+              }}
+            >
+              Manuscript
             </span>
-            <span style={{ fontSize: 9, color: '#5f6664', flex: '0 0 auto' }}>▼</span>
-          </button>
-          <button
-            title="Rename manuscript"
-            disabled={!ms}
-            onClick={renameCurrent}
-            style={{ ...iconBtnStyle, fontSize: 13, opacity: ms ? 1 : 0.4 }}
-          >
-            ✎
-          </button>
-          <button
-            title="Delete manuscript"
-            disabled={!ms}
-            onClick={deleteCurrent}
-            style={{ ...iconBtnStyle, fontSize: 15, opacity: ms ? 1 : 0.4 }}
-          >
-            ×
-          </button>
-        </div>
+            <span
+              style={{
+                display: 'block',
+                fontSize: 14,
+                fontWeight: 600,
+                color: '#e9ecea',
+                marginTop: 2,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {ms?.name ?? '—'}
+            </span>
+          </span>
+          <span style={{ fontSize: 9, color: '#5f6664', flex: '0 0 auto' }}>▼</span>
+        </button>
         {msPickerOpen && (
           <div
             style={{
@@ -297,6 +250,34 @@ function OutlineTab(): JSX.Element {
                       </option>
                     ))}
                   </select>
+                  <button
+                    title="Rename manuscript"
+                    onClick={() => {
+                      const name = prompt('Rename manuscript', m.name);
+                      if (name != null && name.trim() && name.trim() !== m.name) {
+                        void store.renameManuscript(m.id, name);
+                      }
+                    }}
+                    style={{ flex: '0 0 auto', color: '#6d7473', fontSize: 12.5, padding: '0 7px' }}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    title="Delete manuscript"
+                    onClick={() => {
+                      const last = store.manuscriptsList.length === 1;
+                      const msg = last
+                        ? `Delete manuscript “${m.name}”? Its chapters are removed permanently, and a fresh empty manuscript will replace it.`
+                        : `Delete manuscript “${m.name}”? Its chapters are removed permanently.`;
+                      if (confirm(msg)) {
+                        void store.deleteManuscript(m.id);
+                        setMsPickerOpen(false);
+                      }
+                    }}
+                    style={{ flex: '0 0 auto', color: '#6d7473', fontSize: 14, padding: '0 9px' }}
+                  >
+                    ×
+                  </button>
                 </div>
               );
             })}
