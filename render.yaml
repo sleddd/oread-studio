@@ -12,10 +12,10 @@ services:
     startCommand: npm run --workspace @oread/server start
     healthCheckPath: /api/health
     envVars:
+      # Your own external Postgres (e.g. Prisma/Neon). Paste the full connection
+      # string in the Render dashboard — Render does NOT provision a database.
       - key: DATABASE_URL
-        fromDatabase:
-          name: oread-postgres
-          property: connectionString
+        sync: false
       - key: PGSSLMODE
         value: require
       - key: OREAD_STORAGE
@@ -40,9 +40,5 @@ services:
       - key: DISTILL_MODEL
         value: claude-haiku-4-5-20251001
 
-databases:
-  - name: oread-postgres
-    # Render retired legacy DB plan names. Current options: free, basic-256mb,
-    # basic-1gb, basic-4gb, pro-*. `free` = 1GB, expires after 30 days (upgrade
-    # anytime). Bump to basic-256mb (or higher) for a database that persists.
-    plan: free
+# No `databases:` block — Oread uses your own external Postgres. Set
+# DATABASE_URL in the Render dashboard to your provider's connection string.

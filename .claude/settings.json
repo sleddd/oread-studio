@@ -6,7 +6,8 @@
       "Bash(node_modules/.bin/tsx /tmp/wire-model.mjs)",
       "Bash(grep -v \"SECURITY WARNING\\\\|In the next\\\\|To prepare\\\\|If you want\\\\|See https\\\\|trace-warnings\\\\|^$\")",
       "Bash(grep -Ei '\\(^|/\\)\\\\.env$|node_modules/|/dist/|\\\\.log$')",
-      "Bash(grep -Ei '\\(^|/\\)\\\\.env$|node_modules/|/dist/')"
+      "Bash(grep -Ei '\\(^|/\\)\\\\.env$|node_modules/|/dist/')",
+      "Bash(git rebase *)"
     ]
   }
 }
