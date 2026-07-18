@@ -103,6 +103,26 @@ test('delta snapshots reconstruct to the current world state', async () => {
   assert.ok(true);
 });
 
+test('rejects world ids that escape the storage root (path traversal)', async () => {
+  for (const evil of ['../escape', '../../etc', 'a/../../b', '/abs/path']) {
+    await assert.rejects(
+      () => store.getWorld(ctx, evil),
+      /invalid world id/,
+      `getWorld should reject ${evil}`,
+    );
+    await assert.rejects(
+      () => store.saveWorld(ctx, evil, minimalWorld('x')),
+      /invalid world id/,
+      `saveWorld should reject ${evil}`,
+    );
+    await assert.rejects(
+      () => store.deleteWorld(ctx, evil),
+      /invalid world id/,
+      `deleteWorld should reject ${evil}`,
+    );
+  }
+});
+
 test('chats save and list, distillation flag flips', async () => {
   const wid = await store.createWorld(ctx, 'W', minimalWorld('W'));
   const chat = await store.saveChat(ctx, {

@@ -17,7 +17,7 @@ import {
   readdirSync,
   rmSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve, relative, isAbsolute } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import jsonpatch from 'fast-json-patch';
 import type { Operation } from 'fast-json-patch';
@@ -63,7 +63,15 @@ export class FileStore implements WorldStore {
   }
 
   #worldDir(id: string): string {
-    return join(this.#root, id);
+    // Contain the per-world directory within #root. World/chat IDs arrive from
+    // client request params/bodies; a `..` segment (or absolute path) would
+    // otherwise let read/write/delete escape the worlds directory.
+    const dir = resolve(this.#root, id);
+    const rel = relative(this.#root, dir);
+    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
+      throw new Error(`invalid world id: ${id}`);
+    }
+    return dir;
   }
 
   #readWorld(id: string): WorldDocument | null {
