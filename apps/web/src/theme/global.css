@@ -1,0 +1,99 @@
+/* Global reset + keyframes, lifted from the prototype's <style> block. */
+:root {
+  --accent: #2e9d9d;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #0d0f0f;
+}
+body {
+  font-family: 'Manrope', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+#root {
+  height: 100%;
+}
+a {
+  color: var(--accent, #2e9d9d);
+  text-decoration: none;
+}
+a:hover {
+  color: #43c2c2;
+}
+input,
+textarea,
+button,
+select {
+  font-family: inherit;
+  color: inherit;
+}
+textarea,
+input {
+  outline: none;
+}
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+::selection {
+  background: rgba(46, 157, 157, 0.32);
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #24292a;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #313839;
+  background-clip: padding-box;
+}
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%238b918f' stroke-width='1.4' fill='none' stroke-linecap='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 26px !important;
+}
+@keyframes om-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+@keyframes om-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+@keyframes om-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "oread-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Oread Studio — a connected writing workspace for fiction and nonfiction authors.",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:server": "npm run dev --workspace @oread/server",
+    "dev:web": "npm run dev --workspace @oread/web",
+    "db:bootstrap": "npm run db:bootstrap --workspace @oread/server",
+    "db:migrate": "npm run db:migrate --workspace @oread/server"
+  }
+}

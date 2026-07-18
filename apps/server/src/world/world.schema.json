@@ -1,0 +1,248 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://oread.studio/schemas/world.json",
+  "title": "Oread World Document",
+  "type": "object",
+  "required": ["world"],
+  "additionalProperties": false,
+  "properties": {
+    "world": {
+      "type": "object",
+      "required": [
+        "identity",
+        "premise",
+        "setting",
+        "entities",
+        "structure",
+        "memory",
+        "suggestions",
+        "session"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "identity": {
+          "type": "object",
+          "required": ["id", "name", "version", "mode", "created", "lastModified"],
+          "additionalProperties": true,
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "version": { "type": "string" },
+            "mode": { "enum": ["fiction", "nonfiction", "roleplay", "hybrid"] },
+            "created": { "type": "string" },
+            "lastModified": { "type": "string" }
+          }
+        },
+        "premise": {
+          "type": "object",
+          "required": ["logline", "synopsis", "themes", "genre", "tone"],
+          "additionalProperties": true,
+          "properties": {
+            "logline": { "type": "string" },
+            "synopsis": { "type": "string" },
+            "themes": { "type": "array", "items": { "type": "string" } },
+            "genre": { "type": "array", "items": { "type": "string" } },
+            "tone": { "type": "string" },
+            "thesis": { "type": "string" }
+          }
+        },
+        "setting": {
+          "type": "object",
+          "required": ["lore", "timePeriod", "locations", "rules"],
+          "additionalProperties": true,
+          "properties": {
+            "lore": { "type": "string" },
+            "timePeriod": { "type": "string" },
+            "locations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "name"],
+                "additionalProperties": true,
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "description": { "type": "string" },
+                  "significance": { "type": "string" },
+                  "tags": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "statement"],
+                "additionalProperties": true,
+                "properties": {
+                  "id": { "type": "string" },
+                  "statement": { "type": "string" },
+                  "implications": { "type": "string" },
+                  "canBreak": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "entities": {
+          "type": "object",
+          "required": ["characters", "relationships", "factions", "concepts", "sources"],
+          "additionalProperties": true,
+          "properties": {
+            "characters": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "name", "role", "definition", "state", "arc"],
+                "additionalProperties": true,
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "role": { "type": "string" },
+                  "definition": { "type": "object" },
+                  "state": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "knowledge": { "type": "array", "items": { "type": "string" } },
+                      "inventory": { "type": "array", "items": { "type": "string" } }
+                    }
+                  },
+                  "arc": { "type": "object" }
+                }
+              }
+            },
+            "relationships": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "between"],
+                "additionalProperties": true,
+                "properties": {
+                  "id": { "type": "string" },
+                  "between": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                }
+              }
+            },
+            "factions": { "type": "array" },
+            "concepts": { "type": "array" },
+            "sources": { "type": "array" }
+          }
+        },
+        "structure": {
+          "type": "object",
+          "required": ["chapters", "scenes", "timeline"],
+          "additionalProperties": true,
+          "properties": {
+            "chapters": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "title", "status"],
+                "additionalProperties": true,
+                "properties": {
+                  "id": { "type": "string" },
+                  "order": { "type": "number" },
+                  "title": { "type": "string" },
+                  "status": { "enum": ["outline", "drafting", "revised", "final"] },
+                  "wordCount": { "type": "number" }
+                }
+              }
+            },
+            "scenes": { "type": "array" },
+            "timeline": { "type": "array" }
+          }
+        },
+        "memory": {
+          "type": "object",
+          "required": ["events", "canon", "openThreads", "decisions"],
+          "additionalProperties": true,
+          "properties": {
+            "events": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "type", "summary", "importance"],
+                "additionalProperties": true,
+                "properties": {
+                  "id": { "type": "string" },
+                  "type": {
+                    "enum": [
+                      "plot",
+                      "character-development",
+                      "worldbuilding",
+                      "decision",
+                      "retcon",
+                      "research-finding"
+                    ]
+                  },
+                  "summary": { "type": "string" },
+                  "importance": { "type": "number", "minimum": 1, "maximum": 5 }
+                }
+              }
+            },
+            "canon": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "fact"],
+                "additionalProperties": true,
+                "properties": {
+                  "id": { "type": "string" },
+                  "fact": { "type": "string" },
+                  "immutable": { "type": "boolean" }
+                }
+              }
+            },
+            "openThreads": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "description", "status"],
+                "additionalProperties": true,
+                "properties": {
+                  "id": { "type": "string" },
+                  "description": { "type": "string" },
+                  "status": { "enum": ["open", "resolved", "abandoned"] }
+                }
+              }
+            },
+            "decisions": { "type": "array" }
+          }
+        },
+        "suggestions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "target", "type", "status"],
+            "additionalProperties": true,
+            "properties": {
+              "id": { "type": "string" },
+              "target": { "type": "string" },
+              "type": {
+                "enum": ["rewrite", "cut", "expand", "flag", "continuity-error"]
+              },
+              "status": { "enum": ["pending", "accepted", "rejected"] }
+            }
+          }
+        },
+        "session": {
+          "type": "object",
+          "required": ["defaultMode", "modeConfigs"],
+          "additionalProperties": true,
+          "properties": {
+            "defaultMode": {
+              "enum": ["cowrite", "draft", "edit", "critique", "discuss"]
+            },
+            "modeConfigs": { "type": "object" }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0d0f0f; }
+  body { font-family: "Manrope", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent, #2e9d9d); text-decoration: none; }
+  a:hover { color: #43c2c2; }
+  input, textarea, button, select { font-family: inherit; color: inherit; }
+  textarea, input { outline: none; }
+  button { cursor: pointer; border: none; background: none; }
+  ::selection { background: rgba(46,157,157,0.32); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #24292a; border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: #313839; background-clip: padding-box; }
+  select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%238b918f' stroke-width='1.4' fill='none' stroke-linecap='round'/></svg>"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 26px !important; }
+  @keyframes om-blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+  @keyframes om-dot { 0%,80%,100%{opacity:0.25;transform:translateY(0)} 40%{opacity:1;transform:translateY(-3px)} }
+  @keyframes om-up { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+</style>
+</helmet>
+
+<div style="height:100vh;display:flex;flex-direction:column;background:#0d0f0f;color:#e9ecea;overflow:hidden;">
+
+  <!-- ===== TOP BAR ===== -->
+  <header style="display:flex;align-items:center;justify-content:space-between;padding:16px 26px;border-bottom:1px solid #1c2020;flex:0 0 auto;">
+    <div style="display:flex;align-items:center;gap:13px;">
+      <div style="width:8px;height:8px;border-radius:50%;background:var(--accent,#2e9d9d);box-shadow:0 0 10px var(--accent,#2e9d9d);"></div>
+      <div style="font-weight:600;font-size:19px;letter-spacing:0.36em;color:#f3f5f4;padding-left:2px;">OREAD</div>
+      <div style="width:1px;height:20px;background:#262b2b;margin:0 6px;"></div>
+      <div style="position:relative;">
+        <button onClick="{{ toggleWorldPicker }}" style="display:flex;align-items:center;gap:8px;font-size:13px;color:#aeb4b2;padding:4px 6px;border-radius:7px;" style-hover="color:#e9ecea;background:#161a1a;">
+          <span style="letter-spacing:0.02em;">{{ worldName }}</span>
+          <span style="font-size:9px;color:#5f6664;">▼</span>
+        </button>
+        <sc-if value="{{ worldPickerOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;top:calc(100% + 10px);left:0;width:280px;background:#141818;border:1px solid #262b2b;border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,0.55);padding:8px;z-index:60;animation:om-up .16s ease;">
+            <div style="font-size:10.5px;letter-spacing:0.14em;text-transform:uppercase;color:#6d7473;font-weight:700;padding:6px 8px 8px;">Worlds</div>
+            <sc-for list="{{ worldList }}" as="w" hint-placeholder-count="2">
+              <button onClick="{{ w.onClick }}" style="{{ w.style }}">
+                <span style="width:6px;height:6px;border-radius:50%;background:{{ w.dot }};flex:0 0 auto;"></span>
+                <span style="min-width:0;"><span style="display:block;font-size:14px;font-weight:600;color:#e9ecea;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ w.name }}</span><span style="font-size:11.5px;color:#6d7473;">{{ w.meta }}</span></span>
+              </button>
+            </sc-for>
+            <button onClick="{{ newWorld }}" style="width:100%;text-align:left;margin-top:4px;padding:10px 11px;border-radius:9px;font-size:13.5px;font-weight:600;color:var(--accent,#2e9d9d);border:1px dashed #22403f;" style-hover="background:rgba(46,157,157,0.08);">+  New world</button>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+    <nav style="display:flex;align-items:center;gap:26px;color:#aeb4b2;font-size:14.5px;font-weight:500;">
+      <div style="position:relative;">
+        <button onClick="{{ toggleSettings }}" title="Settings" style="display:flex;align-items:center;gap:7px;color:{{ settingsBtnColor }};font-size:14.5px;font-weight:500;border:1px solid {{ settingsBtnBorder }};border-radius:8px;padding:6px 12px;" style-hover="color:#e9ecea;border-color:#3a4241;">
+          <span style="width:12px;height:12px;border-radius:3px;background:var(--accent,#2e9d9d);"></span>Settings
+        </button>
+        <sc-if value="{{ settingsOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;top:calc(100% + 10px);right:0;width:300px;background:#141818;border:1px solid #262b2b;border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,0.55);padding:16px 16px 18px;z-index:60;animation:om-up .16s ease;">
+            <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#6d7473;font-weight:700;margin-bottom:10px;">Accent</div>
+            <div style="display:flex;gap:9px;margin-bottom:20px;">
+              <sc-for list="{{ accentSwatches }}" as="sw" hint-placeholder-count="4">
+                <button onClick="{{ sw.onClick }}" title="{{ sw.name }}" style="{{ sw.style }}">
+                  <sc-if value="{{ sw.active }}" hint-placeholder-val="{{ false }}"><span style="color:#fff;font-size:14px;font-weight:800;">✓</span></sc-if>
+                </button>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#6d7473;font-weight:700;margin-bottom:10px;">Prose typeface</div>
+            <div style="display:flex;gap:5px;background:#0f1212;border:1px solid #1c2121;border-radius:10px;padding:4px;margin-bottom:20px;">
+              <sc-for list="{{ typefaceOptions }}" as="t" hint-placeholder-count="3">
+                <button onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.label }}</button>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#6d7473;font-weight:700;margin-bottom:10px;">Writing format</div>
+            <select value="{{ format }}" onChange="{{ setFormat }}" style="width:100%;background:#0f1212;border:1px solid #262b2b;border-radius:9px;color:#e9ecea;font-size:14px;font-weight:600;padding:10px 12px;">
+              <sc-for list="{{ formatOptions }}" as="f" hint-placeholder-count="6">
+                <option value="{{ f.value }}">{{ f.label }}</option>
+              </sc-for>
+            </select>
+          </div>
+        </sc-if>
+      </div>
+    </nav>
+  </header>
+  <sc-if value="{{ settingsOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeSettings }}" style="position:fixed;inset:0;z-index:55;"></div>
+  </sc-if>
+  <sc-if value="{{ anyPickerOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closePickers }}" style="position:fixed;inset:0;z-index:55;"></div>
+  </sc-if>
+
+  <!-- ===== BODY ===== -->
+  <div style="display:flex;flex:1 1 auto;min-height:0;">
+
+    <!-- ========== LEFT : NAVIGATOR ========== -->
+    <aside style="width:290px;flex:0 0 auto;border-right:1px solid #1c2020;background:#101313;display:flex;flex-direction:column;min-height:0;">
+      <div style="display:flex;gap:4px;padding:14px 16px 10px;flex:0 0 auto;">
+        <button onClick="{{ setNavOutline }}" style="{{ outlineTabStyle }}">Manuscript</button>
+        <button onClick="{{ setNavWorld }}" style="{{ worldTabStyle }}">World</button>
+      </div>
+
+      <div style="flex:1 1 auto;overflow-y:auto;padding:6px 10px 16px;">
+
+        <!-- OUTLINE -->
+        <sc-if value="{{ isOutline }}" hint-placeholder-val="{{ true }}">
+          <div style="position:relative;padding:2px 4px 12px;">
+            <button onClick="{{ toggleMsPicker }}" style="width:100%;display:flex;align-items:center;gap:9px;padding:10px 11px;border-radius:10px;background:#131717;border:1px solid #1e2323;text-align:left;" style-hover="border-color:#3a4241;">
+              <span style="min-width:0;flex:1 1 auto;"><span style="display:block;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#5f6664;font-weight:700;">Manuscript</span><span style="display:block;font-size:14px;font-weight:600;color:#e9ecea;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ msName }}</span></span>
+              <span style="font-size:9px;color:#5f6664;flex:0 0 auto;">▼</span>
+            </button>
+            <sc-if value="{{ msPickerOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;top:calc(100% + 6px);left:0;right:0;background:#141818;border:1px solid #262b2b;border-radius:13px;box-shadow:0 18px 50px rgba(0,0,0,0.55);padding:8px;z-index:40;animation:om-up .16s ease;">
+                <sc-for list="{{ msList }}" as="m" hint-placeholder-count="2">
+                  <button onClick="{{ m.onClick }}" style="{{ m.style }}">
+                    <span style="width:6px;height:6px;border-radius:50%;background:{{ m.dot }};flex:0 0 auto;"></span>
+                    <span style="min-width:0;"><span style="display:block;font-size:13.5px;font-weight:600;color:#e9ecea;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ m.name }}</span><span style="font-size:11px;color:#6d7473;">{{ m.meta }}</span></span>
+                  </button>
+                </sc-for>
+                <button onClick="{{ newManuscript }}" style="width:100%;text-align:left;margin-top:4px;padding:9px 11px;border-radius:9px;font-size:13px;font-weight:600;color:var(--accent,#2e9d9d);border:1px dashed #22403f;" style-hover="background:rgba(46,157,157,0.08);">+  New manuscript</button>
+              </div>
+            </sc-if>
+          </div>
+          <div style="padding:6px 8px 12px;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#5f6664;font-weight:600;">Chapters</div>
+          <sc-for list="{{ chaptersNav }}" as="ch" hint-placeholder-count="2">
+            <button onClick="{{ ch.onClick }}" style="{{ ch.style }}">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <span style="font-size:14.5px;font-weight:600;color:{{ ch.titleColor }};">{{ ch.title }}</span>
+                <span style="font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:{{ ch.statusColor }};font-weight:600;">{{ ch.status }}</span>
+              </div>
+              <div style="font-size:12.5px;color:#6d7473;margin-top:4px;">{{ ch.meta }}</div>
+            </button>
+          </sc-for>
+          <button onClick="{{ newChapter }}" style="width:100%;text-align:left;margin-top:8px;padding:11px 12px;border-radius:9px;font-size:13.5px;color:#6d7473;border:1px dashed #2a3030;" style-hover="color:#9aa19f;border-color:#3a4241;">+  New chapter</button>
+        </sc-if>
+
+        <!-- WORLD TREE -->
+        <sc-if value="{{ isWorld }}" hint-placeholder-val="{{ true }}">
+          <sc-for list="{{ worldNav }}" as="sec" hint-placeholder-count="6">
+            <div style="margin-bottom:2px;">
+              <button onClick="{{ sec.onToggle }}" style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 8px;border-radius:8px;" style-hover="background:#161a1a;">
+                <span style="font-size:10px;color:#5f6664;width:10px;display:inline-block;transform:{{ sec.caret }};transition:transform .15s;">▶</span>
+                <span style="font-size:12.5px;letter-spacing:0.1em;text-transform:uppercase;color:#9aa19f;font-weight:600;">{{ sec.label }}</span>
+                <span style="margin-left:auto;font-size:11px;color:#4f5655;background:#181c1c;border-radius:20px;padding:1px 8px;">{{ sec.count }}</span>
+              </button>
+              <sc-if value="{{ sec.expanded }}" hint-placeholder-val="{{ true }}">
+                <div style="padding:2px 0 6px 6px;">
+                  <sc-if value="{{ sec.empty }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:12px;color:#4f5655;font-style:italic;padding:6px 10px;">Nothing here yet — add as you write.</div>
+                  </sc-if>
+                  <sc-for list="{{ sec.items }}" as="it" hint-placeholder-count="3">
+                    <button onClick="{{ it.onClick }}" style="{{ it.style }}">
+                      <span style="width:5px;height:5px;border-radius:50%;background:{{ it.dot }};flex:0 0 auto;"></span>
+                      <span style="font-size:13.5px;color:{{ it.color }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ it.label }}</span>
+                      <span style="margin-left:auto;font-size:10.5px;color:#4f5655;letter-spacing:0.04em;">{{ it.type }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </sc-if>
+      </div>
+
+      <div style="flex:0 0 auto;border-top:1px solid #1c2020;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:12px;color:#5f6664;">{{ savedLabel }}</span>
+        <button onClick="{{ ping }}" style="font-size:13px;font-weight:600;color:#cfd3d1;border:1px solid #2a3030;border-radius:8px;padding:7px 13px;" style-hover="border-color:var(--accent,#2e9d9d);color:#fff;">Save as World</button>
+      </div>
+    </aside>
+
+    <!-- ========== CENTER : CANVAS / WORLD ========== -->
+    <main style="flex:1 1 auto;display:flex;flex-direction:column;min-width:0;background:#0d0f0f;">
+
+      <!-- WRITE VIEW -->
+      <sc-if value="{{ isWrite }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:16px 34px;border-bottom:1px solid #16191a;gap:16px 20px;flex-wrap:wrap;">
+          <div style="min-width:180px;flex:1 1 auto;">
+            <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#5f6664;font-weight:600;">{{ docKicker }}</div>
+            <div style="font-family:'Newsreader',serif;font-size:23px;font-weight:500;color:#eef0ef;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ docTitle }}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:18px;flex:0 0 auto;">
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+              <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#5f6664;font-weight:600;">Format</div>
+              <select value="{{ format }}" onChange="{{ setFormat }}" style="background:#16191a;border:1px solid #262b2b;border-radius:8px;color:#e9ecea;font-size:14px;font-weight:600;padding:7px 12px;">
+                <sc-for list="{{ formatOptions }}" as="f" hint-placeholder-count="6">
+                  <option value="{{ f.value }}">{{ f.label }}</option>
+                </sc-for>
+              </select>
+            </div>
+            <div style="width:1px;height:34px;background:#1e2222;"></div>
+            <div style="text-align:right;">
+              <div style="font-size:15px;font-weight:700;color:#cfd3d1;">{{ wordCount }}</div>
+              <div style="font-size:11px;color:#5f6664;">words</div>
+            </div>
+          </div>
+        </div>
+        <div style="flex:1 1 auto;overflow-y:auto;display:flex;justify-content:center;padding:44px 34px 120px;">
+          <div style="width:100%;max-width:{{ editorWidth }};">
+            <textarea value="{{ manuscript }}" onChange="{{ onManuscript }}" spellcheck="false" placeholder="{{ editorPlaceholder }}"
+              style="width:100%;min-height:60vh;background:transparent;border:none;resize:none;color:#e6e9e7;font-family:{{ editorFont }};font-size:{{ editorSize }};line-height:{{ editorLh }};letter-spacing:0.005em;"></textarea>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- WORLD DETAIL VIEW -->
+      <sc-if value="{{ isWorldDetail }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:16px 34px;border-bottom:1px solid #16191a;gap:12px 16px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1 1 auto;">
+            <button onClick="{{ goWrite }}" style="font-size:13px;color:#8b918f;display:flex;align-items:center;gap:6px;flex:0 0 auto;" style-hover="color:#e9ecea;">‹ Manuscript</button>
+            <span style="color:#333a3a;">/</span>
+            <span style="font-size:13px;color:#6d7473;">{{ detailBreadcrumb }}</span>
+          </div>
+          <button onClick="{{ askAboutNode }}" style="font-size:13px;font-weight:600;color:var(--accent,#2e9d9d);border:1px solid #22403f;border-radius:8px;padding:7px 13px;" style-hover="background:rgba(46,157,157,0.1);">Discuss this →</button>
+        </div>
+        <div style="flex:1 1 auto;overflow-y:auto;padding:38px 34px 120px;">
+          <div style="max-width:820px;margin:0 auto;">
+            <div style="display:flex;align-items:flex-start;gap:22px;margin-bottom:30px;">
+              <sc-if value="{{ detail.hasImage }}" hint-placeholder-val="{{ false }}">
+                <div style="width:118px;height:118px;flex:0 0 auto;border-radius:14px;background:repeating-linear-gradient(135deg,#171b1b,#171b1b 7px,#141818 7px,#141818 14px);border:1px solid #242929;display:flex;align-items:center;justify-content:center;">
+                  <span style="font-family:monospace;font-size:11px;color:#4f5655;">portrait</span>
+                </div>
+              </sc-if>
+              <div style="flex:1 1 auto;">
+                <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent,#2e9d9d);font-weight:600;">{{ detail.kicker }}</div>
+                <div style="font-family:'Newsreader',serif;font-size:34px;font-weight:500;color:#f1f3f2;margin-top:4px;line-height:1.1;">{{ detail.title }}</div>
+                <div style="font-size:15px;color:#8b918f;margin-top:8px;line-height:1.5;">{{ detail.subtitle }}</div>
+              </div>
+            </div>
+
+            <sc-for list="{{ detail.groups }}" as="g" hint-placeholder-count="2">
+              <div style="margin-bottom:26px;">
+                <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#6d7473;font-weight:700;padding-bottom:12px;border-bottom:1px solid #1a1e1e;margin-bottom:14px;">{{ g.heading }}</div>
+                <div style="display:flex;flex-direction:column;gap:16px;">
+                  <sc-for list="{{ g.fields }}" as="fld" hint-placeholder-count="3">
+                    <div>
+                      <div style="font-size:12.5px;color:#7d8382;font-weight:600;margin-bottom:6px;">{{ fld.label }}</div>
+                      <sc-if value="{{ fld.readonly }}" hint-placeholder-val="{{ false }}">
+                        <div style="font-size:15px;line-height:1.6;color:#c9cdcb;background:#121616;border:1px solid #1c2121;border-radius:10px;padding:12px 14px;white-space:pre-wrap;">{{ fld.value }}</div>
+                      </sc-if>
+                      <sc-if value="{{ fld.editableLong }}" hint-placeholder-val="{{ false }}">
+                        <textarea value="{{ fld.value }}" onChange="{{ fld.onChange }}" style="width:100%;min-height:88px;resize:vertical;font-size:15px;line-height:1.6;color:#e0e3e1;background:#121616;border:1px solid #232929;border-radius:10px;padding:12px 14px;" style-focus="border-color:var(--accent,#2e9d9d);"></textarea>
+                      </sc-if>
+                      <sc-if value="{{ fld.editableShort }}" hint-placeholder-val="{{ false }}">
+                        <input value="{{ fld.value }}" onChange="{{ fld.onChange }}" style="width:100%;font-size:15px;color:#e0e3e1;background:#121616;border:1px solid #232929;border-radius:10px;padding:11px 14px;" style-focus="border-color:var(--accent,#2e9d9d);" />
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+    </main>
+
+    <!-- ========== RIGHT : STUDIO CHAT ========== -->
+    <sc-if value="{{ chatOpen }}" hint-placeholder-val="{{ true }}">
+    <aside style="width:392px;flex:0 0 auto;border-left:1px solid #1c2020;background:#101313;display:flex;flex-direction:column;min-height:0;">
+
+      <!-- chat header -->
+      <div style="flex:0 0 auto;padding:14px 16px 12px;border-bottom:1px solid #1a1e1e;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <span style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#7d8382;font-weight:700;">Studio</span>
+          <button onClick="{{ toggleChat }}" title="Collapse" style="color:#5f6664;font-size:15px;padding:2px 6px;" style-hover="color:#cfd3d1;">›</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <sc-for list="{{ castNav }}" as="c" hint-placeholder-count="4">
+            <button onClick="{{ c.onClick }}" title="{{ c.name }}" style="{{ c.avatarStyle }}">{{ c.initials }}</button>
+          </sc-for>
+          <div style="margin-left:4px;min-width:0;">
+            <div style="font-size:14.5px;font-weight:700;color:#e9ecea;">{{ activeName }}</div>
+            <div style="font-size:12px;color:#6d7473;">{{ activeRole }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- mode pills -->
+      <div style="flex:0 0 auto;padding:12px 14px 10px;border-bottom:1px solid #1a1e1e;">
+        <div style="display:flex;gap:5px;background:#0f1212;border:1px solid #1c2121;border-radius:11px;padding:4px;">
+          <sc-for list="{{ modeNav }}" as="m" hint-placeholder-count="5">
+            <button onClick="{{ m.onClick }}" style="{{ m.style }}">{{ m.label }}</button>
+          </sc-for>
+        </div>
+        <div style="font-size:12.5px;color:#7d8382;line-height:1.4;margin-top:10px;padding:0 2px;">{{ modeHint }}</div>
+        <!-- contextual mode config -->
+        <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:11px;">
+          <sc-for list="{{ modeCfg }}" as="cfg" hint-placeholder-count="2">
+            <label style="display:flex;align-items:center;gap:7px;background:#141818;border:1px solid #1e2323;border-radius:8px;padding:5px 9px;">
+              <span style="font-size:11px;color:#6d7473;letter-spacing:0.02em;">{{ cfg.label }}</span>
+              <select value="{{ cfg.value }}" onChange="{{ cfg.onChange }}" style="background:transparent;border:none;font-size:12.5px;font-weight:600;color:var(--accent,#2e9d9d);padding:0 20px 0 0;">
+                <sc-for list="{{ cfg.options }}" as="o" hint-placeholder-count="3">
+                  <option value="{{ o }}">{{ o }}</option>
+                </sc-for>
+              </select>
+            </label>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- messages -->
+      <div ref="{{ scrollRef }}" style="flex:1 1 auto;overflow-y:auto;padding:20px 16px;display:flex;flex-direction:column;gap:16px;">
+        <sc-for list="{{ msgs }}" as="m" hint-placeholder-count="4">
+
+          <!-- USER -->
+          <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ false }}">
+            <div style="align-self:flex-end;max-width:86%;">
+              <div style="background:var(--accent,#2e9d9d);color:#04201f;border-radius:16px 16px 4px 16px;padding:11px 15px;font-size:14.5px;line-height:1.5;font-weight:500;">{{ m.text }}</div>
+              <div style="text-align:right;font-size:10.5px;color:#4f5655;margin-top:4px;">{{ m.time }}</div>
+            </div>
+          </sc-if>
+
+          <!-- ASSISTANT: plain / prose -->
+          <sc-if value="{{ m.isBubble }}" hint-placeholder-val="{{ true }}">
+            <div style="align-self:flex-start;max-width:92%;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <span style="width:22px;height:22px;border-radius:50%;background:{{ m.avatarBg }};border:1.5px solid var(--accent,#2e9d9d);display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;color:#cfe;">{{ m.initials }}</span>
+                <span style="font-size:12.5px;font-weight:600;color:#9aa19f;">{{ m.charName }}</span>
+                <span style="font-size:10.5px;color:#4f5655;">{{ m.time }}</span>
+              </div>
+              <div style="background:#1a1f1f;border:1px solid #232929;border-radius:4px 16px 16px 16px;padding:13px 16px;font-size:{{ m.fontSize }};line-height:1.62;color:#dfe3e1;font-family:{{ m.font }};white-space:pre-wrap;">{{ m.text }}</div>
+              <sc-if value="{{ m.isProse }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;gap:8px;margin-top:8px;">
+                  <button onClick="{{ m.onInsert }}" style="font-size:12.5px;font-weight:600;color:#04201f;background:var(--accent,#2e9d9d);border-radius:8px;padding:6px 12px;" style-hover="filter:brightness(1.12);">Insert into manuscript</button>
+                  <button onClick="{{ m.onCopy }}" style="font-size:12.5px;font-weight:600;color:#9aa19f;border:1px solid #262b2b;border-radius:8px;padding:6px 12px;" style-hover="color:#e9ecea;border-color:#3a4241;">Copy</button>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <!-- ASSISTANT: suggestion (edit / critique) -->
+          <sc-if value="{{ m.isSuggestion }}" hint-placeholder-val="{{ false }}">
+            <div style="align-self:flex-start;width:100%;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <span style="width:22px;height:22px;border-radius:50%;background:{{ m.avatarBg }};border:1.5px solid var(--accent,#2e9d9d);display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;color:#cfe;">{{ m.initials }}</span>
+                <span style="font-size:12.5px;font-weight:600;color:#9aa19f;">{{ m.charName }}</span>
+                <span style="font-size:10.5px;color:#4f5655;">{{ m.time }}</span>
+              </div>
+              <div style="background:#14181a;border:1px solid #233332;border-radius:12px;overflow:hidden;">
+                <div style="display:flex;align-items:center;gap:8px;padding:9px 13px;border-bottom:1px solid #1c2626;background:#111617;">
+                  <span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;font-weight:700;color:{{ m.sugColor }};background:{{ m.sugBg }};border-radius:5px;padding:2px 7px;">{{ m.sugType }}</span>
+                  <span style="font-size:11.5px;color:#6d7473;font-family:monospace;">{{ m.anchor }}</span>
+                </div>
+                <div style="padding:12px 13px;">
+                  <sc-if value="{{ m.hasOriginal }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:13.5px;line-height:1.55;color:#8b918f;text-decoration:line-through;text-decoration-color:#5a3535;font-family:'Newsreader',serif;margin-bottom:9px;">{{ m.original }}</div>
+                  </sc-if>
+                  <sc-if value="{{ m.hasProposed }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:14.5px;line-height:1.6;color:#e6e9e7;font-family:'Newsreader',serif;border-left:2px solid var(--accent,#2e9d9d);padding-left:11px;">{{ m.proposed }}</div>
+                  </sc-if>
+                  <div style="font-size:12.5px;color:#7d8382;margin-top:11px;font-style:italic;">{{ m.rationale }}</div>
+                </div>
+                <div style="display:flex;gap:8px;padding:0 13px 13px;">
+                  <sc-if value="{{ m.pending }}" hint-placeholder-val="{{ true }}">
+                    <button onClick="{{ m.onAccept }}" style="font-size:12.5px;font-weight:600;color:#04201f;background:var(--accent,#2e9d9d);border-radius:8px;padding:6px 13px;" style-hover="filter:brightness(1.12);">{{ m.acceptLabel }}</button>
+                    <button onClick="{{ m.onReject }}" style="font-size:12.5px;font-weight:600;color:#9aa19f;border:1px solid #262b2b;border-radius:8px;padding:6px 13px;" style-hover="color:#e9ecea;border-color:#3a4241;">Reject</button>
+                  </sc-if>
+                  <sc-if value="{{ m.resolved }}" hint-placeholder-val="{{ false }}">
+                    <span style="font-size:12.5px;font-weight:600;color:{{ m.statusColor }};padding:6px 0;">{{ m.statusLabel }}</span>
+                  </sc-if>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+        </sc-for>
+
+        <!-- thinking -->
+        <sc-if value="{{ thinking }}" hint-placeholder-val="{{ false }}">
+          <div style="align-self:flex-start;display:flex;align-items:center;gap:8px;">
+            <span style="width:22px;height:22px;border-radius:50%;background:#1a1f1f;border:1.5px solid var(--accent,#2e9d9d);display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;color:#cfe;">{{ activeInitials }}</span>
+            <div style="background:#1a1f1f;border:1px solid #232929;border-radius:14px;padding:11px 15px;display:flex;gap:5px;">
+              <span style="width:6px;height:6px;border-radius:50%;background:#6d7473;animation:om-dot 1.2s infinite;"></span>
+              <span style="width:6px;height:6px;border-radius:50%;background:#6d7473;animation:om-dot 1.2s infinite 0.2s;"></span>
+              <span style="width:6px;height:6px;border-radius:50%;background:#6d7473;animation:om-dot 1.2s infinite 0.4s;"></span>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+
+      <!-- composer -->
+      <div style="flex:0 0 auto;border-top:1px solid #1a1e1e;padding:12px 14px 14px;">
+        <sc-if value="{{ hasModeAction }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ runModeAction }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:9px;background:var(--accent,#2e9d9d);color:#04201f;font-size:13.5px;font-weight:700;border-radius:11px;padding:11px 14px;margin-bottom:9px;" style-hover="filter:brightness(1.1);">
+            <span style="font-size:14px;">{{ modeActionIcon }}</span>{{ modeActionLabel }}
+          </button>
+          <div style="font-size:11.5px;color:#5f6664;text-align:center;margin-bottom:11px;">{{ modeActionSub }}</div>
+        </sc-if>
+        <div style="background:#141818;border:1px solid #232929;border-radius:14px;padding:10px 12px;" style-focus-within="border-color:var(--accent,#2e9d9d);">
+          <textarea value="{{ input }}" onChange="{{ onInput }}" onKeyDown="{{ onKey }}" rows="2" placeholder="{{ composerPlaceholder }}"
+            style="width:100%;resize:none;background:transparent;border:none;font-size:14.5px;line-height:1.5;color:#e9ecea;"></textarea>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">
+            <span style="font-size:11px;color:#4f5655;">{{ activeName }} · {{ modeLabel }}</span>
+            <button onClick="{{ send }}" style="font-size:13px;font-weight:700;color:#04201f;background:var(--accent,#2e9d9d);border-radius:9px;padding:7px 16px;" style-hover="filter:brightness(1.12);">Send</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+    </sc-if>
+
+    <!-- collapsed chat rail -->
+    <sc-if value="{{ chatClosed }}" hint-placeholder-val="{{ false }}">
+      <button onClick="{{ toggleChat }}" style="width:44px;flex:0 0 auto;border-left:1px solid #1c2020;background:#101313;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#8b918f;" style-hover="color:var(--accent,#2e9d9d);background:#121616;">
+        <span style="font-size:16px;">‹</span>
+        <span style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:12px;letter-spacing:0.16em;text-transform:uppercase;font-weight:700;">Studio</span>
+      </button>
+    </sc-if>
+  </div>
+
+  <!-- toast -->
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:#1a1f1f;border:1px solid #2a3332;color:#e9ecea;font-size:13.5px;font-weight:500;padding:11px 18px;border-radius:11px;box-shadow:0 12px 40px rgba(0,0,0,0.5);animation:om-up .22s ease;z-index:50;">{{ toast }}</div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: &quot;100%&quot;, &quot;height&quot;: &quot;100%&quot; },
+  &quot;accent&quot;: { &quot;editor&quot;: &quot;color&quot;, &quot;default&quot;: &quot;#2e9d9d&quot;, &quot;options&quot;: [&quot;#2e9d9d&quot;, &quot;#c9922e&quot;, &quot;#8a6df0&quot;, &quot;#d1617f&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Theme&quot; },
+  &quot;proseTypeface&quot;: { &quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;Serif&quot;, &quot;Sans&quot;, &quot;Monospace&quot;], &quot;default&quot;: &quot;Serif&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Editor&quot; },
+  &quot;startFormat&quot;: { &quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;Novel&quot;, &quot;Short Story&quot;, &quot;Screenplay&quot;, &quot;Poetry&quot;, &quot;Chat / RP&quot;, &quot;Essay&quot;], &quot;default&quot;: &quot;Novel&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Editor&quot; }
+}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const fmtMap = { "Novel":"novel","Short Story":"short","Screenplay":"screenplay","Poetry":"poetry","Chat / RP":"chat","Essay":"essay" };
+    this.uid = 100;
+    this.CAST = {
+      jamie:   { name:"Jamie Chen",   initials:"JC", role:"Pastry chef · protagonist" },
+      sam:     { name:"Sam Reeves",   initials:"SR", role:"Journalist · love interest" },
+      noor:    { name:"Noor Hadid",   initials:"NH", role:"Barista · matchmaker" },
+      narrator:{ name:"The Narrator", initials:"✎", role:"Omniscient voice · your muse" },
+    };
+    this.MODES = [
+      { key:"discuss",  label:"Discuss",  hint:"Talk it through. Nothing gets written." },
+      { key:"cowrite",  label:"Co-write", hint:"Trade turns in-scene. Insert what lands." },
+      { key:"draft",    label:"Draft",    hint:"A full pass from your outline. Review, then insert." },
+      { key:"edit",     label:"Edit",     hint:"Rewrites your text as redlines. Accept or reject." },
+      { key:"critique", label:"Critique", hint:"Margin notes & proposed lines. Applies nothing." },
+    ];
+    this.FORMATS = {
+      novel:     { label:"Novel",       serif:true,  ph:"Begin your chapter…" },
+      short:     { label:"Short Story", serif:true,  ph:"Open the story…" },
+      screenplay:{ label:"Screenplay",  mono:true,   ph:"INT. BEANSTALK COFFEE — MORNING" },
+      poetry:    { label:"Poetry",      serif:true,  ph:"A line, and then the next…" },
+      chat:      { label:"Chat / RP",   sans:true,   ph:"Type an action or a line of dialogue…" },
+      essay:     { label:"Essay",       serif:true,  ph:"State the thing you mean to argue…" },
+    };
+    this.WORLDS = {
+      sweet: { name:"Sweet Nothings", detail:true, msOrder:["ms_sweet"], manuscripts:{
+        ms_sweet: { name:"The Corner of Sweet & Nothing", format:"novel", order:["ch_001","ch_002"], chapters:{
+          ch_001: { title:"The Tower of Doom", status:"Drafting", pov:"Jamie Chen", text:"The bell over Beanstalk's door hadn't finished ringing before disaster arrived.\n\nJamie Chen shouldered through backward, arms wrapped around a tower of pastry boxes that reached his chin — a leaning cardboard monument to poor planning and a worse night's sleep. For one long, terrible second the whole café held its breath with him. Then the top box tipped.\n\nYou were closest. You always seemed to be closest, lately." },
+          ch_002: { title:"Closing Time", status:"Outline", pov:"Sam Reeves", text:"OUTLINE — Closing Time\n\nSam finally admits (to his notebook, not to Jamie) why he keeps coming back at exactly 4:52pm. Noor engineers a reason for them both to stay after the shutters come down. The chapter should end on the un-said thing, not the said one." },
+        }},
+      }},
+      ashfall: { name:"Ashfall", detail:false, msOrder:["ms_ash"], manuscripts:{
+        ms_ash: { name:"The Long Static", format:"screenplay", order:["ch_ash1"], chapters:{
+          ch_ash1: { title:"Cold Open", status:"Drafting", pov:"Det. Vale", text:"INT. PRECINCT — NIGHT\n\nRain against the glass. VALE stares at a corkboard gone quiet three weeks ago." },
+        }},
+      }},
+    };
+    this.worldOrder = ["sweet","ashfall"];
+    this.state = {
+      navMode: "outline",
+      view: "write",
+      selectedNode: null,
+      currentWorld: "sweet",
+      currentMs: "ms_sweet",
+      currentDoc: "ch_001",
+      worldPickerOpen: false,
+      msPickerOpen: false,
+      format: fmtMap[props && props.startFormat] || "novel",
+      accent: (props && props.accent) || "#2e9d9d",
+      proseTypeface: (props && props.proseTypeface) || "Serif",
+      settingsOpen: false,
+      chatOpen: true,
+      character: "jamie",
+      mode: "cowrite",
+      input: "",
+      thinking: false,
+      msgN: 0,
+      toast: null,
+      edits: {},
+      expanded: { Premise:false, Setting:true, Entities:true, Structure:false, Memory:false, Session:false },
+      cfg: {
+        cowrite:  { turnScope:"paragraph", userRole:"author" },
+        draft:    { fromMaterial:"outline", lengthTarget:"~800" },
+        edit:     { editLevel:"line", outputFormat:"redline" },
+        critique: { lens:"pacing", depth:"margin-notes" },
+        discuss:  { focus:"character" },
+      },
+      msgs: [
+        { id:1, role:"user", text:"Set the opening — Jamie bursts in with too many boxes.", time:"1:38:12 AM" },
+        { id:2, role:"assistant", kind:"prose", char:"narrator", text:"Morning light came through Beanstalk's front windows in long amber bars, catching the steam off the espresso machine. It was the kind of hour that belonged to no one yet — too early for the office crowd, too late for the bakers — and into that hush walked disaster, wearing an apron and carrying far too much.", time:"1:38:14 AM" },
+      ],
+    };
+  }
+
+  componentDidMount() { this.applyAccent(); this.scrollBottom(); }
+  componentDidUpdate(p, s) {
+    this.applyAccent();
+    if (s && s.msgs !== this.state.msgs) this.scrollBottom();
+  }
+  applyAccent() {
+    const a = this.state.accent;
+    if (a) document.documentElement.style.setProperty("--accent", a);
+  }
+  scrollBottom() {
+    const el = this._scrollEl;
+    if (el) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+  }
+  now() {
+    const d = new Date();
+    let h = d.getHours(); const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
+    const p = n => String(n).padStart(2, "0");
+    return `${h}:${p(d.getMinutes())}:${p(d.getSeconds())} ${ap}`;
+  }
+  showToast(t) { this.setState({ toast:t }); clearTimeout(this._tt); this._tt = setTimeout(() => this.setState({ toast:null }), 2200); }
+
+  // ---------- WORLD DATA ----------
+  worldSections() {
+    return [
+      { label:"Premise", items:[ { key:"premise", label:"Overview", type:"premise" } ] },
+      { label:"Setting", items:[
+        { key:"lore", label:"Lore & backdrop", type:"lore" },
+        { key:"loc:beanstalk", label:"Beanstalk Coffee", type:"location" },
+        { key:"loc:bakery", label:"Sweet Nothings Bakery", type:"location" },
+        { key:"loc:cityhall", label:"City Hall", type:"location" },
+        { key:"rule:gravity", label:"Small-town gravity", type:"rule" },
+      ]},
+      { label:"Entities", items:[
+        { key:"char:jamie", label:"Jamie Chen", type:"character" },
+        { key:"char:sam", label:"Sam Reeves", type:"character" },
+        { key:"char:noor", label:"Noor Hadid", type:"character" },
+        { key:"rel:jamiesam", label:"Jamie ⇄ Sam", type:"relation" },
+        { key:"concept:family", label:"Found family", type:"concept" },
+        { key:"source:notes", label:"Café field notes", type:"source" },
+      ]},
+      { label:"Structure", items:[
+        { key:"ch:1", label:"Ch 1 · The Tower of Doom", type:"chapter" },
+        { key:"ch:2", label:"Ch 2 · Closing Time", type:"chapter" },
+        { key:"scene:1", label:"Beanstalk, morning", type:"scene" },
+        { key:"timeline", label:"Timeline", type:"timeline" },
+      ]},
+      { label:"Memory", items:[
+        { key:"mem", label:"Event log", type:"events" },
+        { key:"canon", label:"Canon facts", type:"canon" },
+        { key:"threads", label:"Open threads", type:"threads" },
+        { key:"decisions", label:"Decisions", type:"decisions" },
+      ]},
+      { label:"Session", items:[ { key:"session", label:"Session & model", type:"session" } ] },
+    ];
+  }
+
+  detailRaw(key) {
+    const F = (label, value, opt) => Object.assign({ label, value, kind:(opt&&opt.long)?"long":(opt&&opt.ro)?"ro":"short" }, opt||{});
+    const grp = (heading, fields) => ({ heading, fields });
+    const D = {};
+
+    D["premise"] = { kicker:"Premise", title:"The essence", subtitle:"One sentence you could tell a stranger, and everything that unpacks from it.", groups:[
+      grp("Logline", [ F("Logline","A disaster-prone pastry chef and a reserved journalist keep colliding at the same corner café — until the whole neighborhood quietly conspires to keep them there.",{long:true}) ]),
+      grp("Details", [
+        F("Synopsis","Sweet Nothings and Beanstalk share a wall and a clientele. Over one autumn, a string of small catastrophes and smaller kindnesses turns proximity into something neither of them will name first.",{long:true}),
+        F("Themes","found family · small kindnesses · second chances"),
+        F("Genre","contemporary · romance · slice-of-life"),
+        F("Tone","warm, wry, unhurried"),
+      ]),
+    ]};
+    D["lore"] = { kicker:"Setting", title:"Lore & backdrop", subtitle:"The world beneath the world.", groups:[
+      grp("Backdrop", [ F("Lore","A three-block stretch of a mid-size town where every storefront knows every other storefront's business. The café row runs on gossip, day-old pastry, and an unspoken agreement that nobody eats alone.",{long:true}), F("Time period","Present day, one autumn"), ]),
+    ]};
+    D["loc:beanstalk"] = { kicker:"Location", title:"Beanstalk Coffee", subtitle:"loc_001 · the room where everything happens", groups:[
+      grp("Location", [ F("Description","A narrow, warm coffee bar with a chipped marble counter and mismatched chairs. Noor runs it like a living room.",{long:true}), F("Significance","Neutral ground; the place both leads keep ending up in."), F("Tags","recurring · meet-cute-site"), ]),
+    ]};
+    D["loc:bakery"] = { kicker:"Location", title:"Sweet Nothings Bakery", subtitle:"loc_002 · Jamie's kingdom of near-misses", groups:[
+      grp("Location", [ F("Description","The bakery next door, flour-dusted and perpetually behind schedule. Smells like heaven, runs like a comedy.",{long:true}), F("Significance","Jamie's home turf; where he's competent and where he's most himself."), F("Tags","recurring"), ]),
+    ]};
+    D["loc:cityhall"] = { kicker:"Location", title:"City Hall", subtitle:"loc_003 · offstage, mostly", groups:[
+      grp("Location", [ F("Description","The client for the ill-fated pastry order. A place of deadlines and staff meetings that the café row orbits but never quite enters.",{long:true}), F("Significance","External pressure; the reason Jamie is always in a hurry."), F("Tags","climax-site"), ]),
+    ]};
+    D["rule:gravity"] = { kicker:"Convention", title:"Small-town gravity", subtitle:"rule_001 · a bendable convention", groups:[
+      grp("Rule", [ F("Statement","Nobody in this neighborhood can leave a problem alone. Overheard troubles become everyone's project within a day.",{long:true}), F("Implications","Privacy is impossible; help is inevitable. Good for warmth, dangerous for secrets."), F("Type","Bendable convention"), ]),
+    ]};
+    D["char:jamie"] = { kicker:"Character · protagonist", title:"Jamie Chen", subtitle:"Enthusiastic pastry chef and bakery owner next door — a walking disaster with a heart of gold.", image:true, groups:[
+      grp("Definition", [
+        F("Backstory","Took over Sweet Nothings from a retiring mentor and has been one bad morning from bankruptcy ever since — but the neighborhood loves him too much to let it happen.",{long:true}),
+        F("Voice","Fast, warm, self-deprecating. Apologizes mid-sentence. Braver with his hands busy than with his words."),
+        F("Desires","To be seen as competent by someone who's watching closely."),
+        F("Wounds","Certain that people like him despite himself, never because of."),
+        F("Contradiction","Meticulous about pastry, chaotic about everything that isn't."),
+      ]),
+      grp("State", [ F("Location","Beanstalk Coffee"), F("Status","alive · flustered"), F("Currently knows","That someone caught his boxes. Not yet who, or why it stuck with him."), ]),
+      grp("Arc", [ F("Starting point","Overwhelmed, going it alone."), F("Trajectory","Learns to let one specific person carry the other end."), F("Endpoint","Still a disaster — but not a solitary one."), ]),
+    ]};
+    D["char:sam"] = { kicker:"Character · love interest", title:"Sam Reeves", subtitle:"Freelance journalist and accidental neighborhood fixture — quietly observant, secretly romantic.", image:true, groups:[
+      grp("Definition", [
+        F("Backstory","Moved to town for a six-month assignment eighteen months ago and never mentioned the assignment ended.",{long:true}),
+        F("Voice","Spare, precise, dry. Says the true thing only after the moment to say it has passed."),
+        F("Desires","A reason to stay that he didn't have to talk himself into."),
+        F("Wounds","Believes he's a watcher, not a participant."),
+        F("Contradiction","Notices everything about everyone and assumes no one notices him."),
+      ]),
+      grp("State", [ F("Location","Beanstalk Coffee, corner table"), F("Status","alive · pretending to work"), F("Currently knows","Jamie's schedule better than he'd admit."), ]),
+      grp("Arc", [ F("Starting point","Documenting a life from the edge of it."), F("Trajectory","Gets pulled into the frame."), F("Endpoint","Files no story; stays anyway."), ]),
+    ]};
+    D["char:noor"] = { kicker:"Character · supporting", title:"Noor Hadid", subtitle:"Beanstalk barista and unofficial neighborhood social coordinator — knows everyone's business.", image:true, groups:[
+      grp("Definition", [
+        F("Backstory","Has worked the Beanstalk counter for nine years and considers matchmaking a public service.",{long:true}),
+        F("Voice","Warm, teasing, ten steps ahead. Delivers meddling as hospitality."),
+        F("Desires","For the two idiots she's watching to figure it out already."),
+        F("Wounds","None she'll admit to; deflects with everyone else's business."),
+        F("Contradiction","Fiercely private about herself, an open book about everyone else."),
+      ]),
+      grp("State", [ F("Location","Behind the Beanstalk counter"), F("Status","alive · scheming"), F("Currently knows","Exactly how this ends. She's just waiting for the leads to catch up."), ]),
+      grp("Arc", [ F("Starting point","Orchestrator."), F("Trajectory","Steps back at the right moment."), F("Endpoint","Takes full credit, correctly."), ]),
+    ]};
+    D["rel:jamiesam"] = { kicker:"Relationship", title:"Jamie ⇄ Sam", subtitle:"rel_001 · the slow-burn at the center", groups:[
+      grp("Relationship", [ F("Type","Slow-burn / will-they-won't-they"), F("Description","Repeated small collisions at Beanstalk. Sam watches; Jamie fumbles. Neither moves first.",{long:true}), F("Tension","Both are sure the other is just being kind."), F("Shaped by","mem_004 · the caught boxes  ·  mem_017 · the 4:52 habit"), ]),
+    ]};
+    D["concept:family"] = { kicker:"Concept", title:"Found family", subtitle:"con_001 · the thesis under the romance", groups:[
+      grp("Concept", [ F("Definition","The café row as a chosen family that refuses to let its members be alone with anything.",{long:true}), F("Author position","The romance is real, but the neighborhood is the love story."), F("Related","Small-town gravity"), ]),
+    ]};
+    D["source:notes"] = { kicker:"Source", title:"Café field notes", subtitle:"src_001 · research", groups:[
+      grp("Source", [ F("Citation","Author's own notebook, Tuesdays at a real café, autumn."), F("Key claims","People perform smallness in public and reveal themselves in the margins."), F("Reliability","primary"), ]),
+    ]};
+    D["ch:1"] = { kicker:"Chapter", title:"Ch 1 · The Tower of Doom", subtitle:"ch_001 · drafting", groups:[
+      grp("Chapter", [ F("Purpose","Establish the collision, the tone, and that the reader wants these two in a room."), F("Summary","Jamie's pastry tower nearly ends a week of work; a stranger's hands save it.",{long:true}), F("POV","Jamie Chen"), F("Status","Drafting"), F("Word count","1,240"), ]),
+    ]};
+    D["ch:2"] = { kicker:"Chapter", title:"Ch 2 · Closing Time", subtitle:"ch_002 · outline", groups:[
+      grp("Chapter", [ F("Purpose","Move the un-said thing one inch closer to said."), F("Summary","After hours, Noor engineers a reason for Sam and Jamie to stay.",{long:true}), F("POV","Sam Reeves"), F("Status","Outline"), F("Word count","0"), ]),
+    ]};
+    D["scene:1"] = { kicker:"Scene", title:"Beanstalk, morning", subtitle:"scn_001 · in ch_001", groups:[
+      grp("Scene", [ F("Location","Beanstalk Coffee"), F("Present","Jamie, the POV author-insert, Noor"), F("Beats","Boxes tip → hands catch them → sheepish gratitude → Noor clocks it all",{long:true}), F("Timeline","tl_001"), ]),
+    ]};
+    D["timeline"] = { kicker:"Structure", title:"Timeline", subtitle:"Story-world chronology (may differ from chapter order)", groups:[
+      grp("Events", [
+        F("06:41 · tl_001","Jamie's box tower is saved. Revealed in Ch 1.",{ro:true}),
+        F("16:52 · tl_002","Sam's daily arrival, established as a pattern. Revealed in Ch 1.",{ro:true}),
+        F("After close · tl_003","The after-hours conversation. Revealed in Ch 2.",{ro:true}),
+      ]),
+    ]};
+    D["mem"] = { kicker:"Memory", title:"Event log", subtitle:"Append-only record of what happened in the writing sessions", groups:[
+      grp("Recent events", [
+        F("mem_004 · character-development","The caught boxes — first physical contact between the leads. Importance 4.",{ro:true}),
+        F("mem_017 · worldbuilding","Established Sam arrives at 4:52pm daily. Importance 3.",{ro:true}),
+        F("mem_031 · decision","Noor will be the matchmaker, not a rival. Importance 5.",{ro:true}),
+      ]),
+    ]};
+    D["canon"] = { kicker:"Memory", title:"Canon facts", subtitle:"The compressed, immutable truth", groups:[
+      grp("Facts", [
+        F("canon_001","Beanstalk and Sweet Nothings share a wall. Immutable.",{ro:true}),
+        F("canon_002","Sam has never filed the story that brought him to town. Immutable.",{ro:true}),
+      ]),
+    ]};
+    D["threads"] = { kicker:"Memory", title:"Open threads", subtitle:"Promises made to the reader", groups:[
+      grp("Unresolved", [
+        F("thread_001 · open","Why Sam really stayed in town — planted Ch 1, must resolve by Ch 6.",{ro:true}),
+        F("thread_002 · open","Whether the bakery survives the winter — planted Ch 1.",{ro:true}),
+      ]),
+    ]};
+    D["decisions"] = { kicker:"Memory", title:"Decisions", subtitle:"Authorial choices, with reasoning", groups:[
+      grp("Log", [
+        F("dec_001","Sam narrates present tense; Jamie's chapters in past. → The watcher lives in the now; the doer lives in what already happened.",{ro:true}),
+        F("dec_002","No villain. The obstacle is only their own hesitation.",{ro:true}),
+      ]),
+    ]};
+    D["session"] = { kicker:"Session", title:"Session & model", subtitle:"How the studio behaves right now", groups:[
+      grp("Voice", [ F("Narrator voice","third_limited"), F("Hard rules","Never speak for the author. Never contradict canon."), F("Style notes","Warm register, short sentences under pressure, no purple prose."), F("Writing format", this.FORMATS[this.state.format].label + " (set from the manuscript header)",{ro:true}) ]),
+      grp("Model", [ F("Mode", this.MODES.find(m=>m.key===this.state.mode).label + " → " + this.CAST[this.state.character].name,{ro:true}), F("Provider","Anthropic"), F("Available providers","Anthropic · OpenAI · Cloudflare AI · AWS Bedrock · self-host (local Ollama)",{ro:true}), F("Model","claude-sonnet"), F("Temperature","0.85"), F("Context strategy","canon-first"), ]),
+    ]};
+
+    return D[key] || null;
+  }
+
+  // ---------- REPLIES ----------
+  replyFor() {
+    const mode = this.state.mode, ch = this.state.character, n = this.state.msgN;
+    const pick = arr => arr[n % arr.length];
+    if (mode === "discuss") {
+      const bank = {
+        jamie:["Honestly? Jamie would be mortified and cover it with jokes. If you want him vulnerable, put flour on his hands first — he's braver when he's busy.","He wouldn't say what he feels, he'd bake it. Want me to plant a line where he over-explains the pastry order instead of saying thank you?"],
+        sam:["Sam notices everything and says almost nothing. Give the reader his observations, not his feelings — that gap is the whole character.","The risk with Sam is making him a diary. Let one thing he can't stay detached about slip through, early."],
+        noor:["Noor already knows how this ends. She'd nudge them together and pretend it was an accident. Want her to 'accidentally' double-book the corner table?","Careful — Noor can eat the scene. Give her one great line, then get her back behind the counter."],
+        narrator:["I'd tighten the open — start on the door bursting, not the night before. Drop us in the chaos, then explain.","Structurally: you're front-loading warmth. Hold a little back so the after-hours chapter has somewhere to go."],
+      };
+      return { kind:"text", body:pick(bank[ch]) };
+    }
+    if (mode === "cowrite") {
+      const bank = {
+        jamie:["\"Oh — oh no, I'm so sorry—\" Jamie freezes, boxes swaying, and gives you a lopsided, apologetic grin. \"You have very good reflexes. Can I pay you in croissant? I have, um. A lot of croissant.\"","Jamie sets the last box down like it's made of glass, then finally looks at you properly. \"That was going to be a very bad morning,\" he says. \"You just made it a normal one.\""],
+        sam:["Sam looks up from the corner table, pen going still. For a second he only watches the rescue unfold — then goes back to his notebook. But he's smiling now, and he writes something down.","\"You're quick,\" Sam says, which is not what he means. He means something longer. He writes that part down instead of saying it."],
+        noor:["\"Well, well.\" Noor leans over the counter, delighted. \"Jamie, sweetheart, you nearly redecorated my floor with éclairs. Sit. Both of you. I'll bring the good coffee — on the house, don't argue.\""],
+        narrator:["The tower held. For one suspended second the whole café seemed to exhale — and then, because the world is occasionally kind, nothing fell at all."],
+      };
+      return { kind:"prose", body:pick(bank[ch]) };
+    }
+    if (mode === "draft") {
+      const bank = {
+        jamie:["Jamie set the boxes down with the exaggerated care of a man defusing a bomb, wiped his palms on his apron, and finally, properly, looked at you.\n\n\"I'd have lost all of them,\" he said. \"Every last one. There's a staff meeting at City Hall that would never have forgiven me — or, worse, would have forgiven me, kindly, forever.\" He laughed, and something tight came loose in his shoulders. \"So. Thank you. I mean it. I'm Jamie. I own the disaster next door.\""],
+        sam:["Sam had a system for mornings: corner table, second cup, notebook open to a page he never quite filled. The system did not account for a man exploding through the door behind a wall of pastry.\n\nHe watched the rescue the way he watched everything — carefully, from a safe distance — right up until the distance stopped feeling safe. Then he did the thing he never did. He closed the notebook."],
+        noor:["Noor had run the Beanstalk counter for nine years, and in nine years she had learned to read a room the way other people read weather. She saw the boxes go up. She saw the hands go out. She saw, most of all, the half-second too long that the two of them stood there afterward, not letting go of the moment.\n\n\"Coffee's on me,\" she announced, to no one who'd asked. She was already reaching for the good cups."],
+        narrator:["Morning came to the café row the way it always did — in stages. First the bakers, then the light, then the smell of the first roast reaching under Beanstalk's door like an invitation. By the time the office crowd would arrive, the day's small drama would already be over, filed away with all the others in the long, warm ledger of a street that never let anyone be a stranger for long."],
+      };
+      return { kind:"prose", body:pick(bank[ch]) };
+    }
+    if (mode === "edit") {
+      const bank = [
+        { type:"rewrite", original:"The tower sways precariously as he fumbles for the door handle, causing a few nearby patrons to wince in anticipation of the inevitable disaster.", proposed:"The tower swayed. Jamie lunged for the handle, missed, and a week of work leaned out over the tile — until your hand caught the top box first.", rationale:"Cut the adverbs; let the verbs carry the danger. Present tense → past to match the chapter." },
+        { type:"cut", original:"You're just pulling into Beanstalk for your morning caffeine fix when the door suddenly bursts open,", proposed:"The door burst open.", rationale:"'Suddenly' announces surprise instead of delivering it. Open on the action." },
+      ];
+      return { kind:"suggestion", body:pick(bank) };
+    }
+    // critique
+    const bank = [
+      { type:"pacing", original:null, proposed:"Consider starting the chapter on the door bursting open, then flashing the 'long night in the bakery' context after.", rationale:"You spend two sentences on setup before the hook. Lead with the tower." },
+      { type:"voice", original:"His eyes focus, and a look of sheepish gratitude spreads across his face.", proposed:"His grip tightens on the boxes. He won't quite look at you.", rationale:"Sam wouldn't be told the emotion — show it as an action and let the reader infer." },
+      { type:"continuity", original:null, proposed:null, rationale:"Ch 1 says 4:52pm for Sam's arrival (mem_017), but this scene reads as morning. Confirm which is canon before drafting Ch 2." },
+    ];
+    return { kind:"suggestion", body:pick(bank) };
+  }
+
+  // ---------- MODEL HELPERS ----------
+  world() { return this.WORLDS[this.state.currentWorld]; }
+  ms() { const w = this.world(); return w && w.manuscripts[this.state.currentMs]; }
+  chapterObj(id) { const m = this.ms(); return m && m.chapters[id]; }
+  docText() { const c = this.chapterObj(this.state.currentDoc); return c ? c.text : ""; }
+  appendDoc(text) { const c = this.chapterObj(this.state.currentDoc); if (c) c.text = (c.text ? c.text + "\n\n" : "") + text; }
+
+  // ---------- HANDLERS ----------
+  send() {
+    const text = this.state.input.trim();
+    if (!text) return;
+    const u = { id:++this.uid, role:"user", text, time:this.now() };
+    this.setState(s => ({ msgs:[...s.msgs, u], input:"", thinking:true }));
+    const r = this.replyFor();
+    clearTimeout(this._rt);
+    this._rt = setTimeout(() => {
+      const base = { id:++this.uid, role:"assistant", char:this.state.character, time:this.now() };
+      let m;
+      if (r.kind === "suggestion") m = Object.assign(base, { kind:"suggestion", sug:r.body, status:"pending" });
+      else m = Object.assign(base, { kind:r.kind, text:r.body });
+      this.setState(s => ({ msgs:[...s.msgs, m], thinking:false, msgN:s.msgN + 1 }));
+    }, 850);
+  }
+  quickSend(text) { this.setState({ input:text }, () => this.send()); }
+  onInput(e) { this.setState({ input:e.target.value }); }
+  onKey(e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); this.send(); } }
+  insertProse(text) {
+    this.appendDoc(text);
+    this.setState({ view:"write", selectedNode:null });
+    this.showToast("Inserted into the manuscript");
+  }
+  copyText(text) { try { navigator.clipboard.writeText(text); } catch(e){} this.showToast("Copied"); }
+  acceptSug(id, applyText) {
+    if (applyText) this.appendDoc(applyText);
+    this.setState(s => ({ msgs:s.msgs.map(m => m.id === id ? Object.assign({}, m, { status:"accepted" }) : m) }));
+    this.showToast(applyText ? "Applied to the manuscript" : "Suggestion accepted");
+  }
+  rejectSug(id) {
+    this.setState(s => ({ msgs:s.msgs.map(m => m.id === id ? Object.assign({}, m, { status:"rejected" }) : m) }));
+  }
+  onManuscript(e) { const c = this.chapterObj(this.state.currentDoc); if (c) c.text = e.target.value; this.forceUpdate(); }
+  setFormat(e) { const v = e.target.value; const m = this.ms(); if (m) m.format = v; this.setState({ format:v }); }
+
+  // ---------- WORLD / MANUSCRIPT SWITCHING ----------
+  selectWorld(wid) {
+    const w = this.WORLDS[wid]; if (!w) return;
+    const mid = w.msOrder[0]; const m = w.manuscripts[mid];
+    const cid = m ? m.order[0] : null;
+    this.setState({ currentWorld:wid, currentMs:mid, currentDoc:cid, format: m ? m.format : "novel", view:"write", navMode:"outline", selectedNode:null, worldPickerOpen:false });
+    this.showToast("Switched to \u201c" + w.name + "\u201d");
+  }
+  selectMs(mid) {
+    const w = this.world(); const m = w.manuscripts[mid]; if (!m) return;
+    this.setState({ currentMs:mid, currentDoc:m.order[0], format:m.format, view:"write", selectedNode:null, msPickerOpen:false });
+    this.showToast("Opened \u201c" + m.name + "\u201d");
+  }
+  newWorld() {
+    const wid = "w" + (++this.uid), mid = "m" + (++this.uid), cid = "c" + (++this.uid);
+    this.WORLDS[wid] = { name:"Untitled World", detail:false, msOrder:[mid], manuscripts:{ [mid]:{ name:"Untitled Manuscript", format:"novel", order:[cid], chapters:{ [cid]:{ title:"Chapter One", status:"Outline", pov:"\u2014", text:"" } } } } };
+    this.worldOrder.push(wid);
+    this.setState({ currentWorld:wid, currentMs:mid, currentDoc:cid, format:"novel", view:"write", navMode:"outline", selectedNode:null, worldPickerOpen:false });
+    this.showToast("New world created");
+  }
+  newManuscript() {
+    const w = this.world(); const mid = "m" + (++this.uid), cid = "c" + (++this.uid);
+    w.manuscripts[mid] = { name:"Untitled Manuscript", format:"novel", order:[cid], chapters:{ [cid]:{ title:"Chapter One", status:"Outline", pov:"\u2014", text:"" } } };
+    w.msOrder.push(mid);
+    this.setState({ currentMs:mid, currentDoc:cid, format:"novel", view:"write", navMode:"outline", selectedNode:null, msPickerOpen:false });
+    this.showToast("New manuscript created");
+  }
+  newChapter() {
+    const m = this.ms(); const cid = "c" + (++this.uid);
+    m.chapters[cid] = { title:"Untitled Chapter", status:"Outline", pov:"\u2014", text:"" };
+    m.order.push(cid);
+    this.setState({ currentDoc:cid, view:"write", selectedNode:null });
+    this.showToast("Chapter added");
+  }
+  setCfg(mode, key, val) { this.setState(s => ({ cfg: Object.assign({}, s.cfg, { [mode]: Object.assign({}, s.cfg[mode], { [key]:val }) }) })); }
+  editField(id, val) { this.setState(s => ({ edits: Object.assign({}, s.edits, { [id]:val }) })); }
+
+  renderVals() {
+    const st = this.state, self = this;
+    const accentDim = "rgba(46,157,157,0.14)";
+    const activeMode = this.MODES.find(m => m.key === st.mode);
+    const activeChar = this.CAST[st.character];
+
+    // nav tabs
+    const tab = active => `flex:1;padding:8px 10px;border-radius:9px;font-size:13.5px;font-weight:600;text-align:center;transition:all .15s;` +
+      (active ? `background:${accentDim};color:var(--accent,#2e9d9d);` : `background:transparent;color:#6d7473;`);
+
+    // chapters (outline)
+    const curMs = this.ms();
+    const chapterIds = curMs ? curMs.order : [];
+    const chaptersNav = chapterIds.map(id => {
+      const active = st.currentDoc === id && st.view === "write";
+      const c = curMs.chapters[id];
+      return {
+        title:c.title, status:c.status, meta:"POV · " + c.pov,
+        titleColor: active ? "#f1f3f2" : "#cfd3d1",
+        statusColor: c.status === "Drafting" ? "var(--accent,#2e9d9d)" : "#6d7473",
+        style:`width:100%;text-align:left;padding:12px 12px;border-radius:10px;margin-bottom:4px;transition:all .15s;` + (active ? `background:${accentDim};border:1px solid #234140;` : `background:#131717;border:1px solid transparent;`),
+        onClick: () => self.setState({ currentDoc:id, view:"write", selectedNode:null }),
+      };
+    });
+
+    // world tree — full detail only for seeded worlds; others start empty
+    const emptySections = ["Premise","Setting","Entities","Structure","Memory","Session"].map(l => ({ label:l, items:[] }));
+    const sections = (this.world() && this.world().detail) ? this.worldSections() : emptySections;
+    const worldNav = sections.map(sec => {
+      const expanded = !!st.expanded[sec.label];
+      return {
+        label:sec.label, count:sec.items.length, expanded, empty: sec.items.length === 0,
+        caret: expanded ? "rotate(90deg)" : "rotate(0deg)",
+        onToggle: () => self.setState(s => ({ expanded: Object.assign({}, s.expanded, { [sec.label]: !s.expanded[sec.label] }) })),
+        items: sec.items.map(it => {
+          const active = st.selectedNode === it.key && st.view === "world";
+          return {
+            label:it.label, type:it.type,
+            dot: active ? "var(--accent,#2e9d9d)" : "#333a3a",
+            color: active ? "#f1f3f2" : "#aeb4b2",
+            style:`width:100%;display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;text-align:left;transition:all .12s;` + (active ? `background:${accentDim};` : `background:transparent;`),
+            onClick: () => self.setState({ selectedNode:it.key, view:"world" }),
+          };
+        }),
+      };
+    });
+
+    // format options + editor styling
+    const formatOptions = Object.keys(this.FORMATS).map(k => ({ value:k, label:this.FORMATS[k].label }));
+    const fmt = this.FORMATS[st.format];
+    const typePref = st.proseTypeface;
+    let editorFont, editorSize = "18.5px", editorLh = "1.75", editorWidth = "700px";
+    if (fmt.mono) { editorFont = "'Courier New', monospace"; editorSize = "16px"; editorLh = "1.7"; editorWidth = "640px"; }
+    else if (fmt.sans) { editorFont = "'Manrope', sans-serif"; editorSize = "16px"; editorLh = "1.65"; editorWidth = "640px"; }
+    else { editorFont = typePref === "Sans" ? "'Manrope', sans-serif" : typePref === "Monospace" ? "'Courier New', monospace" : "'Newsreader', Georgia, serif"; }
+    if (st.format === "poetry") editorWidth = "560px";
+
+    const manuscript = this.docText();
+    const wc = manuscript.trim() ? manuscript.trim().split(/\s+/).length : 0;
+    const chapTitle = (curMs && curMs.chapters[st.currentDoc]) ? { title:curMs.chapters[st.currentDoc].title, status:curMs.chapters[st.currentDoc].status } : null;
+
+    // cast avatars
+    const castNav = Object.keys(this.CAST).map(k => {
+      const c = this.CAST[k], active = st.character === k;
+      return {
+        name:c.name, initials:c.initials,
+        avatarStyle:`width:38px;height:38px;border-radius:50%;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:all .15s;` +
+          (active ? `background:var(--accent,#2e9d9d);color:#04201f;box-shadow:0 0 0 2px #101313, 0 0 0 4px var(--accent,#2e9d9d);` : `background:#1a1f1f;color:#8b918f;border:1.5px solid #2a3030;`),
+        onClick: () => self.setState({ character:k }),
+      };
+    });
+
+    // mode pills
+    const modeNav = this.MODES.map(m => {
+      const active = st.mode === m.key;
+      return {
+        label:m.label,
+        style:`flex:1;padding:8px 4px;border-radius:8px;font-size:12.5px;font-weight:600;transition:all .12s;` + (active ? `background:var(--accent,#2e9d9d);color:#04201f;` : `background:transparent;color:#7d8382;`),
+        onClick: () => self.setState({ mode:m.key }),
+      };
+    });
+
+    // mode config controls
+    const cfgDefs = {
+      cowrite:[ { key:"turnScope", label:"turn", options:["sentence","paragraph","beat","scene"] }, { key:"userRole", label:"you are", options:["author","character","director"] } ],
+      draft:[ { key:"fromMaterial", label:"from", options:["outline","beats","priorDraft"] }, { key:"lengthTarget", label:"length", options:["~300","~800","~1600","~2200"] } ],
+      edit:[ { key:"editLevel", label:"level", options:["line","structural","developmental"] }, { key:"outputFormat", label:"as", options:["redline","diff","clean"] } ],
+      critique:[ { key:"lens", label:"lens", options:["pacing","voice","continuity","argument"] }, { key:"depth", label:"depth", options:["margin-notes","full-report"] } ],
+      discuss:[ { key:"focus", label:"focus", options:["plot-problem","character","research","theme"] } ],
+    };
+    const modeCfg = (cfgDefs[st.mode] || []).map(d => ({
+      label:d.label, options:d.options, value: st.cfg[st.mode][d.key],
+      onChange: e => self.setCfg(st.mode, d.key, e.target.value),
+    }));
+
+    // messages
+    const sugMeta = {
+      rewrite:{ c:"#e0b25a", b:"rgba(224,178,90,0.14)" }, cut:{ c:"#d1617f", b:"rgba(209,97,127,0.14)" },
+      expand:{ c:"#6fbf73", b:"rgba(111,191,115,0.14)" }, flag:{ c:"#d1617f", b:"rgba(209,97,127,0.14)" },
+      pacing:{ c:"#8a9bf0", b:"rgba(138,155,240,0.14)" }, voice:{ c:"#e0b25a", b:"rgba(224,178,90,0.14)" },
+      continuity:{ c:"#d1617f", b:"rgba(209,97,127,0.14)" }, argument:{ c:"#6fbf73", b:"rgba(111,191,115,0.14)" },
+    };
+    const anchorFor = () => (st.currentDoc === "ch_001" ? "Ch 1 · ¶3" : "Ch 2 · ¶1");
+    const msgs = st.msgs.map(m => {
+      if (m.role === "user") return { isUser:true, text:m.text, time:m.time };
+      const cc = this.CAST[m.char] || this.CAST.narrator;
+      const common = { isUser:false, charName:cc.name, initials:cc.initials, time:m.time, avatarBg:"#1a1f1f" };
+      if (m.kind === "suggestion") {
+        const s = m.sug, sm = sugMeta[s.type] || { c:"#8b918f", b:"rgba(139,145,143,0.14)" };
+        const canApply = !!s.proposed && s.type !== "flag" && st.mode !== "critique" ? true : (!!s.proposed && st.mode === "edit");
+        return Object.assign(common, {
+          isBubble:false, isSuggestion:true,
+          sugType:s.type, sugColor:sm.c, sugBg:sm.b, anchor:anchorFor(),
+          hasOriginal:!!s.original, original:s.original, hasProposed:!!s.proposed, proposed:s.proposed, rationale:s.rationale,
+          pending: m.status === "pending", resolved: m.status !== "pending",
+          acceptLabel: (st.mode === "edit" && s.proposed) ? "Apply redline" : "Accept",
+          statusLabel: m.status === "accepted" ? "✓ Accepted" : "Rejected",
+          statusColor: m.status === "accepted" ? "var(--accent,#2e9d9d)" : "#8b918f",
+          onAccept: () => self.acceptSug(m.id, (st.mode === "edit" && s.proposed) ? s.proposed : null),
+          onReject: () => self.rejectSug(m.id),
+        });
+      }
+      const isProse = m.kind === "prose";
+      return Object.assign(common, {
+        isBubble:true, isProse, isSuggestion:false, text:m.text,
+        font: isProse ? "'Newsreader', Georgia, serif" : "'Manrope', sans-serif",
+        fontSize: isProse ? "15.5px" : "14.5px",
+        onInsert: () => self.insertProse(m.text),
+        onCopy: () => self.copyText(m.text),
+      });
+    });
+
+    // world detail
+    let detail = null, detailBreadcrumb = "";
+    if (st.view === "world" && st.selectedNode) {
+      const raw = this.detailRaw(st.selectedNode);
+      if (raw) {
+        detailBreadcrumb = raw.kicker + " · " + raw.title;
+        detail = {
+          kicker:raw.kicker, title:raw.title, subtitle:raw.subtitle, hasImage:!!raw.image,
+          groups: raw.groups.map((g, gi) => ({
+            heading:g.heading,
+            fields: g.fields.map((f, fi) => {
+              const id = st.selectedNode + ":" + gi + ":" + fi;
+              const val = st.edits[id] != null ? st.edits[id] : f.value;
+              return {
+                label:f.label, value:val,
+                readonly: f.kind === "ro", editableLong: f.kind === "long", editableShort: f.kind === "short",
+                onChange: e => self.editField(id, e.target.value),
+              };
+            }),
+          })),
+        };
+      }
+    }
+
+    // settings
+    const ACCENTS = [ { name:"Teal", hex:"#2e9d9d" }, { name:"Amber", hex:"#c9922e" }, { name:"Violet", hex:"#8a6df0" }, { name:"Rose", hex:"#d1617f" } ];
+    const accentSwatches = ACCENTS.map(a => {
+      const active = st.accent === a.hex;
+      return { name:a.name, active,
+        style:`width:54px;height:44px;border-radius:9px;background:${a.hex};display:flex;align-items:center;justify-content:center;transition:all .12s;` + (active ? `box-shadow:0 0 0 2px #141818, 0 0 0 4px ${a.hex};` : `border:1px solid rgba(255,255,255,0.08);`),
+        onClick: () => self.setState({ accent:a.hex }) };
+    });
+    const typefaceOptions = ["Serif","Sans","Monospace"].map(t => {
+      const active = st.proseTypeface === t;
+      return { label:t,
+        style:`flex:1;padding:8px 4px;border-radius:7px;font-size:12.5px;font-weight:600;transition:all .12s;` + (active ? `background:var(--accent,#2e9d9d);color:#04201f;` : `background:transparent;color:#7d8382;`),
+        onClick: () => self.setState({ proseTypeface:t }) };
+    });
+
+    // one-click action per generative mode, targeting the open chapter
+    const docTitleShort = (chapTitle ? chapTitle.title : "this chapter");
+    const cfg = st.cfg;
+    const modeActionMap = {
+      cowrite: { icon:"▸", label:"Take the next turn", sub:cfg.cowrite.userRole + " hands off · one " + cfg.cowrite.turnScope, prompt:"Take the next " + cfg.cowrite.turnScope + " in the scene." },
+      draft:   { icon:"✎", label:"Write the full draft of " + docTitleShort, sub:"from " + cfg.draft.fromMaterial + " · " + cfg.draft.lengthTarget + " words", prompt:"Write the full draft of " + docTitleShort + " from the " + cfg.draft.fromMaterial + " (" + cfg.draft.lengthTarget + " words)." },
+      edit:    { icon:"⇄", label:"Redline my latest lines", sub:cfg.edit.editLevel + " edit · as " + cfg.edit.outputFormat, prompt:"Do a " + cfg.edit.editLevel + " edit of my latest lines as a " + cfg.edit.outputFormat + "." },
+      critique:{ icon:"◎", label:"Run the critique", sub:cfg.critique.lens + " lens · " + cfg.critique.depth, prompt:"Give me a " + cfg.critique.depth + " critique through the " + cfg.critique.lens + " lens." },
+    };
+    const modeAction = modeActionMap[st.mode] || { icon:"", label:"", sub:"", prompt:"" };
+
+    // world + manuscript pickers
+    const worldList = this.worldOrder.map(wid => {
+      const w = this.WORLDS[wid], active = wid === st.currentWorld;
+      const nMs = w.msOrder.length;
+      return { name:w.name, meta: nMs + (nMs === 1 ? " manuscript" : " manuscripts"), active,
+        dot: active ? "var(--accent,#2e9d9d)" : "#333a3a",
+        style:`width:100%;display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;text-align:left;transition:all .12s;` + (active ? `background:${accentDim};` : `background:transparent;`),
+        onClick: () => self.selectWorld(wid) };
+    });
+    const msList = (this.world() ? this.world().msOrder : []).map(mid => {
+      const m = this.world().manuscripts[mid], active = mid === st.currentMs;
+      const nCh = m.order.length;
+      return { name:m.name, meta: this.FORMATS[m.format].label + " · " + nCh + (nCh === 1 ? " chapter" : " chapters"), active,
+        dot: active ? "var(--accent,#2e9d9d)" : "#333a3a",
+        style:`width:100%;display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;text-align:left;transition:all .12s;` + (active ? `background:${accentDim};` : `background:transparent;`),
+        onClick: () => self.selectMs(mid) };
+    });
+
+    return {
+      worldName: this.world() ? this.world().name : "—",
+      msName: curMs ? curMs.name : "—",
+      worldPickerOpen: st.worldPickerOpen, msPickerOpen: st.msPickerOpen,
+      toggleWorldPicker: () => self.setState(s => ({ worldPickerOpen:!s.worldPickerOpen, msPickerOpen:false })),
+      toggleMsPicker: () => self.setState(s => ({ msPickerOpen:!s.msPickerOpen })),
+      closePickers: () => self.setState({ worldPickerOpen:false, msPickerOpen:false }),
+      worldList, msList,
+      newWorld: () => self.newWorld(), newManuscript: () => self.newManuscript(), newChapter: () => self.newChapter(),
+      anyPickerOpen: st.worldPickerOpen || st.msPickerOpen,
+      ping: () => self.showToast("Prototype — this control is for show"),
+      settingsOpen: st.settingsOpen,
+      toggleSettings: () => self.setState(s => ({ settingsOpen:!s.settingsOpen })),
+      closeSettings: () => self.setState({ settingsOpen:false }),
+      settingsBtnColor: st.settingsOpen ? "#e9ecea" : "#aeb4b2",
+      settingsBtnBorder: st.settingsOpen ? "#3a4241" : "#262b2b",
+      accentSwatches, typefaceOptions,
+      // nav
+      isOutline: st.navMode === "outline", isWorld: st.navMode === "world",
+      setNavOutline: () => self.setState({ navMode:"outline" }),
+      setNavWorld: () => self.setState({ navMode:"world" }),
+      outlineTabStyle: tab(st.navMode === "outline"), worldTabStyle: tab(st.navMode === "world"),
+      chaptersNav, worldNav,
+      savedLabel:"All changes saved",
+      // center
+      isWrite: st.view === "write", isWorldDetail: st.view === "world" && !!detail,
+      goWrite: () => self.setState({ view:"write", selectedNode:null }),
+      docKicker: chapTitle ? ("Chapter · " + chapTitle.status) : "Chapter",
+      docTitle: chapTitle ? chapTitle.title : "Untitled",
+      format:st.format, formatOptions, setFormat: e => self.setFormat(e),
+      wordCount: wc.toLocaleString(),
+      manuscript, onManuscript: e => self.onManuscript(e),
+      editorFont, editorSize, editorLh, editorWidth, editorPlaceholder: fmt.ph,
+      detail, detailBreadcrumb,
+      askAboutNode: () => self.setState({ mode:"discuss" }, () => self.quickSend("Tell me about " + (detail ? detail.title : "this") + ".")),
+      // chat
+      chatOpen: st.chatOpen, chatClosed: !st.chatOpen, toggleChat: () => self.setState(s => ({ chatOpen:!s.chatOpen })),
+      castNav, activeName:activeChar.name, activeRole:activeChar.role, activeInitials:activeChar.initials,
+      modeNav, modeLabel:activeMode.label, modeHint: activeMode.hint.replace("in-scene", "in-scene"), modeCfg,
+      msgs, thinking:st.thinking,
+      input:st.input, onInput:e => self.onInput(e), onKey:e => self.onKey(e), send: () => self.send(),
+      composerPlaceholder: st.mode === "discuss" ? ("Ask " + activeChar.name + " anything…") : st.mode === "cowrite" ? "Add direction, or just take your turn…" : st.mode === "draft" ? "Optional: notes to steer the draft…" : st.mode === "edit" ? "Optional: what should change?" : "Optional: focus the critique…",
+      hasModeAction: st.mode !== "discuss",
+      modeActionLabel: modeAction.label, modeActionIcon: modeAction.icon, modeActionSub: modeAction.sub,
+      runModeAction: () => self.quickSend(modeAction.prompt),
+      scrollRef: el => { self._scrollEl = el; },
+      toast: st.toast,
+    };
+  }
+}
+</script>
+</body>
+</html>

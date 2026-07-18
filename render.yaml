@@ -1,0 +1,38 @@
+# Render blueprint for Oread Studio.
+# Migrations run in the pre-deploy command (idempotent + restartable).
+services:
+  - type: web
+    name: oread-server
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build --workspace @oread/shared
+    # Pre-deploy: bring the public schema up to date, then migrate every user schema.
+    preDeployCommand: npm run db:bootstrap && npm run db:migrate
+    startCommand: npm run --workspace @oread/server start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: oread-postgres
+          property: connectionString
+      - key: PGSSLMODE
+        value: require
+      - key: OREAD_STORAGE
+        value: postgres
+      - key: MASTER_KEY_ACTIVE_VER
+        value: "1"
+      - key: MASTER_KEY_V1
+        sync: false # set in the Render env group / dashboard
+      - key: SESSION_SECRET
+        sync: false
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: SESSION_TTL_DAYS
+        value: "30"
+      - key: WEB_ORIGIN
+        sync: false
+      - key: DISTILL_MODEL
+        value: claude-haiku-4-5-20251001
+
+databases:
+  - name: oread-postgres
+    plan: starter
