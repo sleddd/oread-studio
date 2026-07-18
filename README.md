@@ -192,4 +192,4 @@ DATABASE_URL=postgres://… npm --workspace @oread/server test
 
 </details>
 
-Copyright 2025/2026 Claudette Raynor. This software is provided for non-commercial, personal, and educational use only. Commercial redistribution or use is strictly prohibited without prior written consent from the developer.
+Copyright 2025/2026 Claudette Raynor. This software is provided for non-commercial, personal, and educational use only.
