@@ -1,7 +1,29 @@
+import { useRef } from 'react';
 import { useStore } from '../state/store.js';
+import type { WorldDocument } from '@oread/shared';
 
 export function WorldPicker({ onClose }: { onClose: () => void }): JSX.Element {
   const store = useStore();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const onImportFile = async (file: File) => {
+    let doc: WorldDocument;
+    try {
+      const parsed = JSON.parse(await file.text());
+      // Accept both a bare world doc and one wrapped in { world: ... }.
+      doc = (parsed && parsed.world ? parsed : { world: parsed }) as WorldDocument;
+      if (!doc.world?.identity) throw new Error('missing world.identity');
+    } catch (e) {
+      alert(`Could not read that file as a world JSON: ${(e as Error).message}`);
+      return;
+    }
+    try {
+      await store.importWorld(doc);
+      onClose();
+    } catch (e) {
+      alert(`Import failed: ${(e as Error).message}`);
+    }
+  };
   return (
     <div
       style={{
@@ -148,6 +170,33 @@ export function WorldPicker({ onClose }: { onClose: () => void }): JSX.Element {
         }}
       >
         +&nbsp;&nbsp;New world
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/json,.json"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = ''; // allow re-selecting the same file
+          if (file) void onImportFile(file);
+        }}
+      />
+      <button
+        onClick={() => fileRef.current?.click()}
+        style={{
+          width: '100%',
+          textAlign: 'left',
+          marginTop: 6,
+          padding: '9px 11px',
+          borderRadius: 9,
+          fontSize: 13,
+          fontWeight: 600,
+          color: '#9aa19f',
+          border: '1px solid #262b2b',
+        }}
+      >
+        ↥&nbsp;&nbsp;Import world.json
       </button>
       {store.worldId && (
         <a

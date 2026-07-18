@@ -117,6 +117,7 @@ export interface StoreApi extends StoreState {
   // world switching (flush autosave first)
   openWorld: (id: string) => Promise<void>;
   newWorld: () => Promise<void>;
+  importWorld: (doc: WorldDocument) => Promise<void>;
   saveWorld: () => Promise<void>;
   deleteWorld: (id: string) => Promise<void>;
   deleteManuscript: (mid: string) => Promise<void>;
@@ -279,6 +280,21 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     await openWorld(id);
     showToast('New world created');
   }, [autosave, openWorld, refreshWorlds, showToast]);
+
+  const importWorld = useCallback(
+    async (doc: WorldDocument) => {
+      await autosave.flush();
+      // Create an empty world (server assigns the row id + seeds a manuscript),
+      // then overwrite its document with the imported one and open it.
+      const name = doc.world.identity.name || 'Imported World';
+      const { id } = await apiWorlds.worlds.create(name);
+      await apiWorlds.worlds.save(id, doc);
+      await refreshWorlds();
+      await openWorld(id);
+      showToast(`Imported “${name}”`);
+    },
+    [autosave, openWorld, refreshWorlds, showToast],
+  );
 
   const saveWorld = useCallback(async () => {
     if (!s.worldId || !s.world) return;
@@ -766,6 +782,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     removeCredential,
     openWorld,
     newWorld,
+    importWorld,
     saveWorld,
     deleteWorld,
     deleteManuscript,
