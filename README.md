@@ -55,7 +55,7 @@ allowed to do:
 
 | Mode | What it does |
 |---|---|
-| **Discuss** | Talk it through. Nothing gets written — pure thinking partner. |
+| **Discuss** | Talk it through with character. Nothing gets written — pure thinking partner. |
 | **Co-write** | Trade turns inside a scene. Insert what lands, ignore what doesn't. |
 | **Draft** | A full pass from your outline. Review, then insert. |
 | **Edit** | Rewrites your text as redlines. Accept or reject each one. |
