@@ -42,4 +42,7 @@ services:
 
 databases:
   - name: oread-postgres
-    plan: starter
+    # Render retired legacy DB plan names. Current options: free, basic-256mb,
+    # basic-1gb, basic-4gb, pro-*. `free` = 1GB, expires after 30 days (upgrade
+    # anytime). Bump to basic-256mb (or higher) for a database that persists.
+    plan: free
