@@ -2,7 +2,7 @@
 
 # Oread Studio
 
-**A calm, connected home for the story only you can write.**
+**A connected home for the story only you can write.**
 
 Oread is a writing studio where your world and your words live in one place — and
 where an AI collaborator who actually *knows your book* sits beside you as you
