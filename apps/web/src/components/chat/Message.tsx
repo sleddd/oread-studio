@@ -3,6 +3,20 @@ import { useStore } from '../../state/store.js';
 import { suggestionColors } from '../../theme/tokens.js';
 import { NARRATOR } from '../../state/cast.js';
 
+/**
+ * Citation URLs come from web-search results (attacker-influenceable). Only
+ * allow http(s) into an href — a `javascript:`/`data:` URL in a citation would
+ * otherwise be a one-click XSS. Returns the safe URL or null (render inert).
+ */
+function safeHttpUrl(raw: string): string | null {
+  try {
+    const u = new URL(raw);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export function MessageItem({ m }: { m: ChatMessage }): JSX.Element {
   const store = useStore();
   const cast = store.cast.find((c) => c.id === m.char) ?? NARRATOR;
@@ -205,25 +219,35 @@ export function MessageItem({ m }: { m: ChatMessage }): JSX.Element {
             Sources
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {m.citations.map((cite, i) => (
-              <a
-                key={cite.url}
-                href={cite.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={cite.url}
-                style={{
-                  fontSize: 12,
-                  color: 'var(--accent,#2e9d9d)',
-                  textDecoration: 'none',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {i + 1}. {cite.title}
-              </a>
-            ))}
+            {m.citations.map((cite, i) => {
+              const href = safeHttpUrl(cite.url);
+              const label = `${i + 1}. ${cite.title}`;
+              const base = {
+                fontSize: 12,
+                color: 'var(--accent,#2e9d9d)',
+                textDecoration: 'none',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap' as const,
+              };
+              // Non-http(s) URLs (e.g. javascript:) are rendered as inert text.
+              return href ? (
+                <a
+                  key={cite.url}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={href}
+                  style={base}
+                >
+                  {label}
+                </a>
+              ) : (
+                <span key={cite.url} title={cite.url} style={{ ...base, color: '#6d7473' }}>
+                  {label}
+                </span>
+              );
+            })}
           </div>
         </div>
       )}

@@ -107,6 +107,14 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
       throw e;
     }
 
+    // The applied text is client-supplied — the client sends the accepted
+    // prose/suggestion body. Validate it's a string within a sane bound before
+    // writing it into the manuscript (the OLD content is snapshotted below, so
+    // any bad write is revertable, but we still reject obviously malformed input).
+    if (typeof body.text !== 'string' || body.text.length > 1_000_000) {
+      return reply.code(400).send({ error: 'invalid apply text' });
+    }
+
     const chapter = await store.getChapter(ctxOf(req), body.chapterRowId);
     if (!chapter) return reply.code(404).send({ error: 'chapter not found' });
 
