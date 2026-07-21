@@ -113,25 +113,32 @@ export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
 };
 
 // ─── canonical defaults (mirror the prototype) ──────────────
+// Note: hard rules (session.hardRules) and banned words/phrases are NOT recipe
+// items — they are injected into the trusted prompt header for every mode and are
+// never dropped under budget. `worldRules` (the fiction's own laws) IS soft,
+// droppable context and appears here.
 export const DEFAULT_CONTEXT_RECIPES: ContextRecipes = {
   cowrite: [
     'recentScenesVerbatim:2',
     'characterStates:present',
     'openThreads',
     'canon',
+    'worldRules',
     'styleNotes',
   ],
   draft: [
     'targetOutlineBeats',
     'canon',
+    'worldRules',
     'adjacentChapterSummaries',
     'characterDefinitions:present',
     'styleNotes',
   ],
-  edit: ['targetTextFull', 'styleNotes', 'bannedWords', 'canon:minimal'],
+  edit: ['targetTextFull', 'styleNotes', 'canon:minimal'],
   critique: [
     'targetTextFull',
     'canon',
+    'worldRules',
     'openThreads',
     'timeline',
     'characterStates:present',
@@ -139,6 +146,7 @@ export const DEFAULT_CONTEXT_RECIPES: ContextRecipes = {
   discuss: [
     'premise',
     'canonSummary',
+    'worldRules',
     'openThreads',
     'recentEvents:high-importance',
   ],
