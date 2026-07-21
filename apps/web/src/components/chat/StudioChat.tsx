@@ -2,11 +2,24 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../state/store.js';
 import { MODES, CFG_DEFS, modeAction, composerPlaceholder } from '../../state/modes.js';
 import { MessageItem } from './Message.js';
+import { ChatHistory } from './ChatHistory.js';
 
 export function StudioChat({ onCollapse }: { onCollapse: () => void }): JSX.Element {
   const store = useStore();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const startNewChat = () => {
+    if (
+      store.msgs.length > 0 &&
+      store.activeChatId === null &&
+      !confirm('Start a new chat? The current conversation is unsaved and will be discarded. Use Save Chat first to keep it.')
+    ) {
+      return;
+    }
+    store.newChat();
+  };
 
   // Auto-scroll to bottom on new messages / thinking — set scrollTop directly
   // (NOT scrollIntoView), per the prototype.
@@ -44,7 +57,7 @@ export function StudioChat({ onCollapse }: { onCollapse: () => void }): JSX.Elem
       }}
     >
       {/* header */}
-      <div style={{ flex: '0 0 auto', padding: '14px 16px 12px', borderBottom: '1px solid #1a1e1e' }}>
+      <div style={{ flex: '0 0 auto', padding: '14px 16px 12px', borderBottom: '1px solid #1a1e1e', position: 'relative' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <span
             style={{
@@ -57,10 +70,59 @@ export function StudioChat({ onCollapse }: { onCollapse: () => void }): JSX.Elem
           >
             Studio
           </span>
-          <button onClick={onCollapse} title="Collapse" style={{ color: '#5f6664', fontSize: 15, padding: '2px 6px' }}>
-            ›
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button
+              onClick={() => setHistoryOpen((v) => !v)}
+              title="Saved chats"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: 12,
+                fontWeight: 600,
+                color: historyOpen ? 'var(--accent,#2e9d9d)' : '#8b918f',
+                border: '1px solid #262b2b',
+                borderRadius: 8,
+                padding: '3px 8px',
+              }}
+            >
+              History
+              {store.savedChats.length > 0 && (
+                <span style={{ color: '#5f6664', fontWeight: 700 }}>{store.savedChats.length}</span>
+              )}
+              <span style={{ fontSize: 9 }}>▾</span>
+            </button>
+            <button
+              onClick={startNewChat}
+              title="Start a new chat"
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: '#9aa19f',
+                border: '1px solid #262b2b',
+                borderRadius: 8,
+                padding: '3px 9px',
+              }}
+            >
+              ＋ New
+            </button>
+            <button onClick={onCollapse} title="Collapse" style={{ color: '#5f6664', fontSize: 15, padding: '2px 6px' }}>
+              ›
+            </button>
+          </div>
         </div>
+        {historyOpen && (
+          <ChatHistory
+            chats={store.savedChats}
+            activeChatId={store.activeChatId}
+            onPick={(id) => {
+              setHistoryOpen(false);
+              void store.loadChat(id);
+            }}
+            onDelete={(id) => void store.deleteChat(id)}
+            onClose={() => setHistoryOpen(false)}
+          />
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {store.cast.map((c) => {
             const active = store.character === c.id;
@@ -315,12 +377,7 @@ export function StudioChat({ onCollapse }: { onCollapse: () => void }): JSX.Elem
             )}
             <div style={{ display: 'flex', gap: 8 }}>
               <button
-                onClick={() => {
-                  if (store.msgs.length === 0) return;
-                  if (confirm('Clear this conversation? Unsaved messages are discarded. Use Save Chat first to keep them.')) {
-                    store.clearChat();
-                  }
-                }}
+                onClick={startNewChat}
                 disabled={store.msgs.length === 0}
                 title="Start a fresh chat"
                 style={{
@@ -333,10 +390,11 @@ export function StudioChat({ onCollapse }: { onCollapse: () => void }): JSX.Elem
                   cursor: store.msgs.length === 0 ? 'default' : 'pointer',
                 }}
               >
-                Clear
+                New
               </button>
               <button
                 onClick={() => void store.saveChat()}
+                title={store.activeChatId ? 'Update this saved chat' : 'Save this chat'}
                 style={{
                   fontSize: 13,
                   fontWeight: 600,
@@ -346,7 +404,7 @@ export function StudioChat({ onCollapse }: { onCollapse: () => void }): JSX.Elem
                   padding: '5px 11px',
                 }}
               >
-                Save Chat
+                {store.activeChatId ? 'Update' : 'Save Chat'}
               </button>
               <button
                 onClick={doSend}

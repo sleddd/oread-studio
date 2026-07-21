@@ -43,6 +43,8 @@ export interface CreateChapterInput {
 }
 
 export interface SaveChatInput {
+  /** When set, update this existing chat in place (continued conversation) rather than inserting a new row. */
+  chatId?: string;
   worldId: string;
   title: string | null;
   mode: PersistedChatMode;
@@ -145,4 +147,5 @@ export interface WorldStore {
   saveChat(ctx: StoreCtx, input: SaveChatInput): Promise<ChatRow>;
   markChatDistilled(ctx: StoreCtx, chatId: string): Promise<void>;
   getChat(ctx: StoreCtx, chatId: string): Promise<ChatRow | null>;
+  deleteChat(ctx: StoreCtx, chatId: string): Promise<void>;
 }

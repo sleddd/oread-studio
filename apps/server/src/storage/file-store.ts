@@ -471,6 +471,21 @@ export class FileStore implements WorldStore {
 
   async saveChat(_ctx: StoreCtx, input: SaveChatInput): Promise<ChatRow> {
     const side = this.#readSide(input.worldId);
+    // Continued chat: update the existing row in place (reset distilled — messages changed).
+    if (input.chatId) {
+      const existing = side.chats.find((c) => c.id === input.chatId);
+      if (existing) {
+        existing.title = input.title;
+        existing.mode = input.mode;
+        existing.character_id = input.characterId;
+        existing.messages = input.messages;
+        existing.distilled = false;
+        existing.saved_at = nowIso();
+        this.#writeSide(input.worldId, side);
+        return existing;
+      }
+      // Row vanished — fall through to insert a fresh one.
+    }
     const row: ChatRow = {
       id: randomUUID(),
       world_id: input.worldId,
@@ -505,5 +520,17 @@ export class FileStore implements WorldStore {
       if (chat) return chat;
     }
     return null;
+  }
+
+  async deleteChat(_ctx: StoreCtx, chatId: string): Promise<void> {
+    for (const id of readdirSync(this.#root)) {
+      const side = this.#readSide(id);
+      const idx = side.chats.findIndex((c) => c.id === chatId);
+      if (idx !== -1) {
+        side.chats.splice(idx, 1);
+        this.#writeSide(id, side);
+        return;
+      }
+    }
   }
 }

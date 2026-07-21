@@ -137,3 +137,76 @@ test('chats save and list, distillation flag flips', async () => {
   const got = await store.getChat(ctx, chat.id);
   assert.equal(got!.distilled, true);
 });
+
+test('saveChat with chatId updates in place (continued chat) and resets distilled', async () => {
+  const wid = await store.createWorld(ctx, 'W', minimalWorld('W'));
+  const chat = await store.saveChat(ctx, {
+    worldId: wid,
+    title: 'A talk',
+    mode: 'discuss',
+    characterId: null,
+    messages: [{ id: 1, role: 'user', text: 'hi', time: '1:00 AM' }],
+  });
+  await store.markChatDistilled(ctx, chat.id);
+
+  const updated = await store.saveChat(ctx, {
+    chatId: chat.id,
+    worldId: wid,
+    title: 'A talk',
+    mode: 'discuss',
+    characterId: null,
+    messages: [
+      { id: 1, role: 'user', text: 'hi', time: '1:00 AM' },
+      { id: 2, role: 'assistant', text: 'hello', time: '1:01 AM' },
+    ],
+  });
+
+  assert.equal(updated.id, chat.id, 'same row is reused, not duplicated');
+  assert.equal(updated.messages.length, 2);
+  assert.equal(updated.distilled, false, 'messages changed → distilled resets');
+
+  const list = await store.listChats(ctx, wid);
+  assert.equal(list.length, 1, 'no duplicate row created');
+});
+
+test('deleteChat removes the row and leaves others intact', async () => {
+  const wid = await store.createWorld(ctx, 'W', minimalWorld('W'));
+  const a = await store.saveChat(ctx, {
+    worldId: wid, title: 'A', mode: 'discuss', characterId: null,
+    messages: [{ id: 1, role: 'user', text: 'hi', time: '1:00 AM' }],
+  });
+  const b = await store.saveChat(ctx, {
+    worldId: wid, title: 'B', mode: 'cowrite', characterId: null,
+    messages: [{ id: 1, role: 'user', text: 'yo', time: '1:00 AM' }],
+  });
+  await store.deleteChat(ctx, a.id);
+  assert.equal(await store.getChat(ctx, a.id), null);
+  const list = await store.listChats(ctx, wid);
+  assert.equal(list.length, 1);
+  assert.equal(list[0]!.id, b.id);
+});
+
+test('deleteChat on an unknown id is a no-op', async () => {
+  const wid = await store.createWorld(ctx, 'W', minimalWorld('W'));
+  await store.saveChat(ctx, {
+    worldId: wid, title: 'A', mode: 'discuss', characterId: null,
+    messages: [{ id: 1, role: 'user', text: 'hi', time: '1:00 AM' }],
+  });
+  await store.deleteChat(ctx, 'nope'); // does not throw
+  assert.equal((await store.listChats(ctx, wid)).length, 1);
+});
+
+test('saveChat with a stale chatId inserts a fresh row', async () => {
+  const wid = await store.createWorld(ctx, 'W', minimalWorld('W'));
+  const chat = await store.saveChat(ctx, {
+    chatId: 'does-not-exist',
+    worldId: wid,
+    title: null,
+    mode: 'cowrite',
+    characterId: null,
+    messages: [{ id: 1, role: 'user', text: 'hi', time: '1:00 AM' }],
+  });
+  assert.ok(chat.id && chat.id !== 'does-not-exist');
+  const list = await store.listChats(ctx, wid);
+  assert.equal(list.length, 1);
+});

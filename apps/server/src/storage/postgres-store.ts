@@ -436,6 +436,27 @@ export class PostgresStore implements WorldStore {
 
   async saveChat(ctx: StoreCtx, input: SaveChatInput): Promise<ChatRow> {
     return withUserSchema(ctx.schemaName, async (c) => {
+      // Continued chat: update the existing row in place. Messages changed, so
+      // reset distilled=false — the caller re-runs distillation on every save.
+      if (input.chatId) {
+        const { rows } = await c.query<ChatRow>(
+          `UPDATE chats
+              SET title = $2, mode = $3, character_id = $4, messages = $5,
+                  distilled = false, saved_at = now()
+            WHERE id = $1 AND world_id = $6
+          RETURNING *`,
+          [
+            input.chatId,
+            input.title,
+            input.mode,
+            input.characterId,
+            JSON.stringify(input.messages),
+            input.worldId,
+          ],
+        );
+        if (rows[0]) return rows[0];
+        // Row vanished (e.g. deleted) — fall through to insert a fresh one.
+      }
       const { rows } = await c.query<ChatRow>(
         `INSERT INTO chats (world_id, title, mode, character_id, messages)
          VALUES ($1, $2, $3, $4, $5) RETURNING *`,
@@ -461,6 +482,12 @@ export class PostgresStore implements WorldStore {
     return withUserSchema(ctx.schemaName, async (c) => {
       const { rows } = await c.query<ChatRow>('SELECT * FROM chats WHERE id = $1', [chatId]);
       return rows[0] ?? null;
+    });
+  }
+
+  async deleteChat(ctx: StoreCtx, chatId: string): Promise<void> {
+    await withUserSchema(ctx.schemaName, async (c) => {
+      await c.query('DELETE FROM chats WHERE id = $1', [chatId]);
     });
   }
 }

@@ -22,6 +22,8 @@ function auth(req: FastifyRequest, reply: FastifyReply): boolean {
 }
 
 interface SaveChatBody {
+  /** When set, update this existing chat in place (continued conversation). */
+  chatId?: string;
   worldId: string;
   title: string | null;
   mode: PersistedChatMode;
@@ -40,10 +42,17 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ chats: await store.listChats(ctxOf(req), req.params.id) });
   });
 
+  app.delete<{ Params: { cid: string } }>('/api/chats/:cid', async (req, reply) => {
+    if (!auth(req, reply)) return;
+    await store.deleteChat(ctxOf(req), req.params.cid);
+    return reply.send({ ok: true });
+  });
+
   app.post<{ Body: SaveChatBody }>('/api/chats', async (req, reply) => {
     if (!auth(req, reply)) return;
     const body = req.body;
     const chat = await store.saveChat(ctxOf(req), {
+      chatId: body.chatId,
       worldId: body.worldId,
       title: body.title,
       mode: body.mode,

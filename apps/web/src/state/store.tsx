@@ -21,6 +21,7 @@ import type {
   ManuscriptRow,
   ChapterRow,
   ChatMessage,
+  ChatRow,
   WritingFormat,
   Suggestion,
   PersistedChatMode,
@@ -90,6 +91,10 @@ interface StoreState {
   mode: ChatMode;
   cfg: ModeCfg;
   msgs: ChatMessage[];
+  /** id of the saved chat this transcript came from / was last saved as (null = new, never-saved). */
+  activeChatId: string | null;
+  /** saved chats for the open world (for the history picker). */
+  savedChats: ChatRow[];
   thinking: boolean;
   /** research the web on the next turn (Discuss/Draft only) */
   research: boolean;
@@ -155,7 +160,14 @@ export interface StoreApi extends StoreState {
   acceptSuggestion: (msgId: number | string, apply: boolean) => Promise<void>;
   rejectSuggestion: (msgId: number | string) => void;
   saveChat: () => Promise<void>;
-  clearChat: () => void;
+  /** Start a fresh conversation (discards the current unsaved transcript). */
+  newChat: () => void;
+  /** Load a saved chat into the composer to review / continue it. */
+  loadChat: (id: string) => Promise<void>;
+  /** Delete a saved chat. */
+  deleteChat: (id: string) => Promise<void>;
+  /** Refresh the saved-chats list for the open world. */
+  refreshSavedChats: () => Promise<void>;
   // toast
   showToast: (t: string) => void;
 }
@@ -191,6 +203,8 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     research: false,
     cfg: DEFAULT_CFG,
     msgs: [],
+    activeChatId: null,
+    savedChats: [],
     thinking: false,
     toast: null,
   });
@@ -253,7 +267,10 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
         apiWorlds.manuscripts.list(id),
       ]);
       const firstMs = manuscripts[0] ?? null;
-      const chs = firstMs ? await loadManuscriptChapters(id, firstMs.id) : [];
+      const [chs, chatList] = await Promise.all([
+        firstMs ? loadManuscriptChapters(id, firstMs.id) : Promise.resolve([]),
+        apiWorlds.chats.list(id).then((r) => r.chats).catch(() => [] as ChatRow[]),
+      ]);
       patch({
         worldId: id,
         unattachedView: false,
@@ -267,6 +284,11 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
         navMode: 'outline',
         selectedNode: null,
         character: castFor(world)[0]?.id ?? NARRATOR.id,
+        // fresh chat context for the newly-opened world
+        msgs: [],
+        activeChatId: null,
+        savedChats: chatList,
+        thinking: false,
       });
       showToast(`Switched to “${world.world.identity.name}”`);
     },
@@ -306,7 +328,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     try {
       await apiWorlds.auth.logout();
     } finally {
-      patch({ authed: false, worldId: null, world: null, worldList: [], msgs: [] });
+      patch({ authed: false, worldId: null, world: null, worldList: [], msgs: [], activeChatId: null, savedChats: [] });
     }
   }, [patch]);
 
@@ -702,6 +724,16 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     [],
   );
 
+  const refreshSavedChats = useCallback(async () => {
+    if (!s.worldId) return;
+    try {
+      const { chats } = await apiWorlds.chats.list(s.worldId);
+      patch({ savedChats: chats });
+    } catch {
+      /* non-fatal — history just won't refresh */
+    }
+  }, [s.worldId, patch]);
+
   const saveChat = useCallback(async () => {
     if (!s.worldId || s.msgs.length === 0) {
       showToast('Nothing to save yet');
@@ -709,7 +741,9 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     }
     const mode: PersistedChatMode =
       s.mode === 'discuss' && s.character !== NARRATOR.id ? 'character' : s.mode;
-    const { newEvents } = await apiWorlds.chats.save({
+    // Continuing a loaded chat updates it in place (chatId); a fresh chat inserts.
+    const { chat, newEvents } = await apiWorlds.chats.save({
+      chatId: s.activeChatId ?? undefined,
       worldId: s.worldId,
       title: null,
       mode,
@@ -722,16 +756,55 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
       const { world } = await apiWorlds.worlds.get(s.worldId);
       patch({ world });
     }
+    patch({ activeChatId: chat.id });
+    void refreshSavedChats();
     showToast(newEvents > 0 ? `Chat saved · ${newEvents} memory event(s)` : 'Chat saved');
-  }, [s.worldId, s.msgs, s.mode, s.character, activeChapter, patch, showToast]);
+  }, [s.worldId, s.msgs, s.mode, s.character, s.activeChatId, activeChapter, patch, refreshSavedChats, showToast]);
 
   // Start a fresh conversation. Chat is client-state (unsaved until Save Chat),
-  // so clearing without saving discards the current transcript — hence the toast.
-  const clearChat = useCallback(() => {
-    if (s.msgs.length === 0) return;
-    patch({ msgs: [], thinking: false });
-    showToast('Chat cleared');
-  }, [s.msgs.length, patch, showToast]);
+  // so this discards the current transcript unless it was saved — the caller warns.
+  const newChat = useCallback(() => {
+    patch({ msgs: [], activeChatId: null, thinking: false });
+    showToast('New chat');
+  }, [patch, showToast]);
+
+  // Delete a saved chat. If it's the one currently loaded, keep the transcript
+  // in the composer but detach activeChatId — a later Save creates a fresh row
+  // rather than trying to update the now-deleted one.
+  const deleteChat = useCallback(
+    async (id: string) => {
+      await apiWorlds.chats.remove(id);
+      setS((prev) => ({
+        ...prev,
+        savedChats: prev.savedChats.filter((c) => c.id !== id),
+        activeChatId: prev.activeChatId === id ? null : prev.activeChatId,
+      }));
+      showToast('Chat deleted');
+    },
+    [showToast],
+  );
+
+  // Load a saved chat into the composer to review / continue it. Re-saving
+  // updates that same row (via activeChatId) rather than duplicating it.
+  const loadChat = useCallback(
+    async (id: string) => {
+      const existing = s.savedChats.find((c) => c.id === id);
+      const chat = existing ?? (s.worldId ? (await apiWorlds.chats.list(s.worldId)).chats.find((c) => c.id === id) : undefined);
+      if (!chat) {
+        showToast('Chat not found');
+        return;
+      }
+      patch({
+        msgs: chat.messages,
+        activeChatId: chat.id,
+        mode: chat.mode === 'character' ? 'discuss' : chat.mode,
+        character: chat.character_id ?? NARRATOR.id,
+        thinking: false,
+      });
+      showToast('Chat loaded');
+    },
+    [s.savedChats, s.worldId, patch, showToast],
+  );
 
   // ── world document editing (persisted by Save World) ──
   const editWorldField = useCallback(
@@ -761,9 +834,19 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
 
   const deleteWorldNode = useCallback(
     (key: string) => {
+      // Deleting one item from a collective memory list (event/canon/thread/
+      // decision): stay on that list node so the user can keep pruning. Deleting a
+      // whole node (chapter/scene/character/etc.): deselect and return to the
+      // writing view, since the selected node no longer exists.
+      const staysInPlace = /^(event|canon|thread|decision):/.test(key);
       setS((prev) => {
         if (!prev.world) return prev;
-        return { ...prev, world: deleteEntity(prev.world, key), selectedNode: null, view: 'write' };
+        return {
+          ...prev,
+          world: deleteEntity(prev.world, key),
+          selectedNode: staysInPlace ? prev.selectedNode : null,
+          view: staysInPlace ? prev.view : 'write',
+        };
       });
       showToast('Deleted — remember to Save World');
     },
@@ -817,7 +900,10 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     acceptSuggestion,
     rejectSuggestion,
     saveChat,
-    clearChat,
+    newChat,
+    loadChat,
+    deleteChat,
+    refreshSavedChats,
     showToast,
   };
 

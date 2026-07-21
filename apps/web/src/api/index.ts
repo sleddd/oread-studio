@@ -95,6 +95,7 @@ export const credentials = {
 export const chats = {
   list: (worldId: string) => api.get<{ chats: ChatRow[] }>(`/api/worlds/${worldId}/chats`),
   save: (b: {
+    chatId?: string;
     worldId: string;
     title: string | null;
     mode: PersistedChatMode;
@@ -102,6 +103,7 @@ export const chats = {
     messages: ChatMessage[];
     chapterContext?: string;
   }) => api.post<{ chat: ChatRow; newEvents: number }>('/api/chats', b),
+  remove: (chatId: string) => api.del<{ ok: boolean }>(`/api/chats/${chatId}`),
 };
 
 export const exports = {
