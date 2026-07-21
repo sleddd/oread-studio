@@ -209,5 +209,13 @@ export function deleteEntity(doc: WorldDocument, nodeKey: string): WorldDocument
   else if (type === 'concept') w.entities.concepts = w.entities.concepts.filter((c) => c.id !== id);
   else if (type === 'source') w.entities.sources = w.entities.sources.filter((s) => s.id !== id);
   else if (type === 'scene') w.structure.scenes = w.structure.scenes.filter((s) => s.id !== id);
+  else if (type === 'ch') w.structure.chapters = w.structure.chapters.filter((c) => c.id !== id);
+  // Memory items use collective list nodes (mem/canon/threads/decisions), so
+  // per-item deletes carry a typed 'event:'/'canon:'/'thread:'/'decision:' key.
+  // (Removing outline metadata; prose ChapterRows live in a separate table.)
+  else if (type === 'event') w.memory.events = w.memory.events.filter((e) => e.id !== id);
+  else if (type === 'canon') w.memory.canon = w.memory.canon.filter((c) => c.id !== id);
+  else if (type === 'thread') w.memory.openThreads = w.memory.openThreads.filter((t) => t.id !== id);
+  else if (type === 'decision') w.memory.decisions = w.memory.decisions.filter((d) => d.id !== id);
   return d;
 }

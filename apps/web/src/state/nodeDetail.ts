@@ -41,6 +41,8 @@ export interface DetailGroup {
   fields: EditableField[];
   /** if set, an "+ Add …" affordance is offered for this repeating group */
   addKind?: string;
+  /** if set, a per-group "Delete" affordance is offered; passed to deleteWorldNode */
+  deleteKey?: string;
 }
 export interface NodeDetail {
   kicker: string;
@@ -98,6 +100,16 @@ const F = (
   kind: FieldKind = 'text',
   extra?: Partial<EditableField>,
 ): EditableField => ({ label, path, value: value ?? (kind === 'list' ? [] : ''), kind, ...extra });
+
+/** camelCase object key → human label, e.g. "suggestRewrites" → "Suggest rewrites". */
+function humanizeKey(key: string): string {
+  const spaced = key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2') // camelCase boundary
+    .replace(/[_-]+/g, ' ') // snake / kebab
+    .trim()
+    .toLowerCase();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
 
 function charIndex(doc: WorldDocument, id: string): number {
   return doc.world.entities.characters.findIndex((c) => c.id === id);
@@ -374,6 +386,7 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
       title: c.title,
       subtitle: c.id,
       hasImage: false,
+      deletable: true,
       groups: [
         {
           heading: 'Chapter',
@@ -444,115 +457,133 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
   }
 
   // ── memory: events ──
+  // One group per event so each can be edited AND deleted individually. The first
+  // group also carries the "+ Add" affordance for the list as a whole.
   if (key === 'mem') {
+    const eventGroups: DetailGroup[] =
+      w.memory.events.length === 0
+        ? [{ heading: 'Events', addKind: 'event', fields: [] }]
+        : w.memory.events.map((e, i) => {
+            const base = `world.memory.events[${i}]`;
+            return {
+              heading: e.summary ? `Event · ${e.summary.slice(0, 40)}` : `Event · ${e.id}`,
+              addKind: i === 0 ? 'event' : undefined,
+              deleteKey: `event:${e.id}`,
+              fields: [
+                F('Summary', `${base}.summary`, e.summary),
+                F('Type', `${base}.type`, e.type, 'enum', {
+                  options: ['plot', 'character-development', 'worldbuilding', 'decision', 'retcon', 'research-finding'],
+                }),
+                F('Detail', `${base}.detail`, e.detail, 'long'),
+                F('Importance (1-5)', `${base}.importance`, e.importance, 'num'),
+                F('Entities', `${base}.entities`, e.entities, 'list'),
+                F('Chapter context', `${base}.chapterContext`, e.chapterContext),
+                F('Supersedes (retcon)', `${base}.supersedes`, e.supersedes ?? ''),
+              ],
+            };
+          });
     return {
       kicker: 'Memory',
       title: 'Event log',
-      subtitle: 'Append-only record of what happened in the writing sessions',
+      subtitle: 'What happened in the writing sessions — edit or delete individual events',
       hasImage: false,
-      groups: [
-        {
-          heading: 'Events',
-          addKind: 'event',
-          fields: w.memory.events.flatMap((e, i) => {
-            const base = `world.memory.events[${i}]`;
-            return [
-              F(`Summary · ${e.id}`, `${base}.summary`, e.summary),
-              F('Type', `${base}.type`, e.type, 'enum', {
-                options: ['plot', 'character-development', 'worldbuilding', 'decision', 'retcon', 'research-finding'],
-              }),
-              F('Detail', `${base}.detail`, e.detail, 'long'),
-              F('Importance (1-5)', `${base}.importance`, e.importance, 'num'),
-              F('Entities', `${base}.entities`, e.entities, 'list'),
-              F('Chapter context', `${base}.chapterContext`, e.chapterContext),
-              F('Supersedes (retcon)', `${base}.supersedes`, e.supersedes ?? ''),
-            ];
-          }),
-        },
-      ],
+      groups: eventGroups,
     };
   }
 
   // ── memory: canon ──
+  // One group per fact so each can be edited AND deleted individually.
   if (key === 'canon') {
+    const factGroups: DetailGroup[] =
+      w.memory.canon.length === 0
+        ? [{ heading: 'Facts', addKind: 'canon', fields: [] }]
+        : w.memory.canon.map((c, i) => {
+            const base = `world.memory.canon[${i}]`;
+            return {
+              heading: c.fact ? `Fact · ${c.fact.slice(0, 40)}` : `Fact · ${c.id}`,
+              addKind: i === 0 ? 'canon' : undefined,
+              deleteKey: `canon:${c.id}`,
+              fields: [
+                F('Fact', `${base}.fact`, c.fact, 'long'),
+                F('Established by', `${base}.establishedBy`, c.establishedBy, 'list'),
+                F('Immutable', `${base}.immutable`, c.immutable, 'bool'),
+              ],
+            };
+          });
     return {
       kicker: 'Memory',
       title: 'Canon facts',
-      subtitle: 'The compressed, immutable truth',
+      subtitle: 'The compressed, immutable truth — edit or delete individual facts',
       hasImage: false,
-      groups: [
-        {
-          heading: 'Facts',
-          addKind: 'canon',
-          fields: w.memory.canon.flatMap((c, i) => [
-            F(`Fact · ${c.id}`, `world.memory.canon[${i}].fact`, c.fact, 'long'),
-            F('Established by', `world.memory.canon[${i}].establishedBy`, c.establishedBy, 'list'),
-            F('Immutable', `world.memory.canon[${i}].immutable`, c.immutable, 'bool'),
-          ]),
-        },
-      ],
+      groups: factGroups,
     };
   }
 
   // ── memory: threads ──
   if (key === 'threads') {
+    const threadGroups: DetailGroup[] =
+      w.memory.openThreads.length === 0
+        ? [{ heading: 'Threads', addKind: 'thread', fields: [] }]
+        : w.memory.openThreads.map((t, i) => {
+            const base = `world.memory.openThreads[${i}]`;
+            return {
+              heading: t.description ? `Thread · ${t.description.slice(0, 40)}` : `Thread · ${t.id}`,
+              addKind: i === 0 ? 'thread' : undefined,
+              deleteKey: `thread:${t.id}`,
+              fields: [
+                F('Description', `${base}.description`, t.description, 'long'),
+                F('Planted in', `${base}.plantedIn`, t.plantedIn),
+                F('Must resolve by', `${base}.mustResolveBy`, t.mustResolveBy),
+                F('Status', `${base}.status`, t.status, 'enum', {
+                  options: ['open', 'resolved', 'abandoned'],
+                }),
+                F('Resolved in', `${base}.resolvedIn`, t.resolvedIn ?? ''),
+              ],
+            };
+          });
     return {
       kicker: 'Memory',
       title: 'Open threads',
-      subtitle: 'Promises made to the reader',
+      subtitle: 'Promises made to the reader — edit or delete individual threads',
       hasImage: false,
-      groups: [
-        {
-          heading: 'Threads',
-          addKind: 'thread',
-          fields: w.memory.openThreads.flatMap((t, i) => {
-            const base = `world.memory.openThreads[${i}]`;
-            return [
-              F(`Description · ${t.id}`, `${base}.description`, t.description, 'long'),
-              F('Planted in', `${base}.plantedIn`, t.plantedIn),
-              F('Must resolve by', `${base}.mustResolveBy`, t.mustResolveBy),
-              F('Status', `${base}.status`, t.status, 'enum', {
-                options: ['open', 'resolved', 'abandoned'],
-              }),
-              F('Resolved in', `${base}.resolvedIn`, t.resolvedIn ?? ''),
-            ];
-          }),
-        },
-      ],
+      groups: threadGroups,
     };
   }
 
   // ── memory: decisions ──
   if (key === 'decisions') {
+    const decisionGroups: DetailGroup[] =
+      w.memory.decisions.length === 0
+        ? [{ heading: 'Log', addKind: 'decision', fields: [] }]
+        : w.memory.decisions.map((d, i) => {
+            const base = `world.memory.decisions[${i}]`;
+            return {
+              heading: d.decision ? `Decision · ${d.decision.slice(0, 40)}` : `Decision · ${d.id}`,
+              addKind: i === 0 ? 'decision' : undefined,
+              deleteKey: `decision:${d.id}`,
+              fields: [
+                F('Decision', `${base}.decision`, d.decision, 'long'),
+                F('Reasoning', `${base}.reasoning`, d.reasoning, 'long'),
+                F('Date', `${base}.date`, d.date),
+              ],
+            };
+          });
     return {
       kicker: 'Memory',
       title: 'Decisions',
-      subtitle: 'Authorial choices, with reasoning',
+      subtitle: 'Authorial choices, with reasoning — edit or delete individual decisions',
       hasImage: false,
-      groups: [
-        {
-          heading: 'Log',
-          addKind: 'decision',
-          fields: w.memory.decisions.flatMap((d, i) => {
-            const base = `world.memory.decisions[${i}]`;
-            return [
-              F(`Decision · ${d.id}`, `${base}.decision`, d.decision, 'long'),
-              F('Reasoning', `${base}.reasoning`, d.reasoning, 'long'),
-              F('Date', `${base}.date`, d.date),
-            ];
-          }),
-        },
-      ],
+      groups: decisionGroups,
     };
   }
 
   // ── session ──
   if (key === 'session') {
     const sess = w.session;
-    // One model/credential for the whole world.
+    // One model/credential for the whole world — shared by every mode.
     const model = sess.model ?? { credentialId: null, provider: null, model: null, temperature: 0.85 };
     const modelGroup: DetailGroup = {
-      heading: 'Model (used by every mode)',
+      heading: 'Model & sampling — shared by every mode',
       fields: [
         // Credential dropdown → also sets provider; Model dropdown depends on provider.
         F('Credential', 'world.session.model.credentialId', model.credentialId ?? '', 'credential'),
@@ -561,39 +592,42 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
         F('Temperature', 'world.session.model.temperature', model.temperature ?? 0.85, 'num'),
       ],
     };
-    // Behavioral-only mode groups.
-    const modeGroups = (Object.keys(sess.modeConfigs) as (keyof typeof sess.modeConfigs)[]).map((m) => {
+
+    // Voice, rules & filters — one shared set applied across all modes.
+    const voiceGroup: DetailGroup = {
+      heading: 'Voice, rules & filters — shared by every mode',
+      fields: [
+        F('Default mode', 'world.session.defaultMode', sess.defaultMode, 'enum', {
+          options: ['cowrite', 'draft', 'edit', 'critique', 'discuss'],
+        }),
+        F('Narrator voice', 'world.session.narratorVoice', sess.narratorVoice),
+        F('AI rules — never broken (one per line)', 'world.session.hardRules', sess.hardRules, 'list', { sep: '\n' }),
+        F('Style notes', 'world.session.styleNotes', sess.styleNotes, 'long'),
+        F('Banned words (never output)', 'world.session.linguisticFilters.bannedWords', sess.linguisticFilters.bannedWords, 'list'),
+        F('Banned phrases (one per line)', 'world.session.linguisticFilters.bannedPhrases', sess.linguisticFilters.bannedPhrases, 'list', { sep: '\n' }),
+      ],
+    };
+
+    // Per-mode BEHAVIORAL knobs. Each mode has its own distinct fields, so each
+    // gets its own headed group — the heading/divider is what visually separates
+    // one mode from the next. These follow the two shared groups above.
+    const modeGroups: DetailGroup[] = (Object.keys(sess.modeConfigs) as (keyof typeof sess.modeConfigs)[]).map((m) => {
       const cfg = sess.modeConfigs[m] as unknown as Record<string, unknown>;
       const base = `world.session.modeConfigs.${m}`;
       const fields: EditableField[] = [];
       for (const [k, v] of Object.entries(cfg)) {
         const kind: FieldKind = typeof v === 'boolean' ? 'bool' : typeof v === 'number' ? 'num' : Array.isArray(v) ? 'list' : 'text';
-        fields.push(F(k, `${base}.${k}`, v, kind));
+        fields.push(F(humanizeKey(k), `${base}.${k}`, v, kind));
       }
-      return { heading: `Mode · ${m}`, fields };
+      return { heading: `${m} mode — behavior`, fields };
     });
+
     return {
       kicker: 'Session',
       title: 'Session & model',
-      subtitle: 'How the studio behaves right now',
+      subtitle: 'Shared model, voice & rules — plus each mode’s own behavior',
       hasImage: false,
-      groups: [
-        modelGroup,
-        {
-          heading: 'Voice & rules',
-          fields: [
-            F('Default mode', 'world.session.defaultMode', sess.defaultMode, 'enum', {
-              options: ['cowrite', 'draft', 'edit', 'critique', 'discuss'],
-            }),
-            F('Narrator voice', 'world.session.narratorVoice', sess.narratorVoice),
-            F('Hard rules', 'world.session.hardRules', sess.hardRules, 'list', { sep: '\n' }),
-            F('Style notes', 'world.session.styleNotes', sess.styleNotes, 'long'),
-            F('Banned words', 'world.session.linguisticFilters.bannedWords', sess.linguisticFilters.bannedWords, 'list'),
-            F('Banned phrases', 'world.session.linguisticFilters.bannedPhrases', sess.linguisticFilters.bannedPhrases, 'list', { sep: '\n' }),
-          ],
-        },
-        ...modeGroups,
-      ],
+      groups: [modelGroup, voiceGroup, ...modeGroups],
     };
   }
 

@@ -385,21 +385,42 @@ export function WorldDetail(): JSX.Element | null {
                 >
                   {g.heading}
                 </div>
-                {g.addKind && (
-                  <button
-                    onClick={() => store.addWorldEntity(g.addKind as never)}
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: 'var(--accent,#2e9d9d)',
-                      border: '1px dashed #22403f',
-                      borderRadius: 7,
-                      padding: '4px 10px',
-                    }}
-                  >
-                    + Add
-                  </button>
-                )}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {g.addKind && (
+                    <button
+                      onClick={() => store.addWorldEntity(g.addKind as never)}
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: 'var(--accent,#2e9d9d)',
+                        border: '1px dashed #22403f',
+                        borderRadius: 7,
+                        padding: '4px 10px',
+                      }}
+                    >
+                      + Add
+                    </button>
+                  )}
+                  {g.deleteKey && (
+                    <button
+                      onClick={() => {
+                        if (confirm('Delete this item? Remember to Save World to persist.')) {
+                          store.deleteWorldNode(g.deleteKey!);
+                        }
+                      }}
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: '#d1617f',
+                        border: '1px solid #3a2530',
+                        borderRadius: 7,
+                        padding: '4px 10px',
+                      }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {g.fields.length === 0 ? (
