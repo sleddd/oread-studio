@@ -7,7 +7,12 @@
       "Bash(grep -v \"SECURITY WARNING\\\\|In the next\\\\|To prepare\\\\|If you want\\\\|See https\\\\|trace-warnings\\\\|^$\")",
       "Bash(grep -Ei '\\(^|/\\)\\\\.env$|node_modules/|/dist/|\\\\.log$')",
       "Bash(grep -Ei '\\(^|/\\)\\\\.env$|node_modules/|/dist/')",
-      "Bash(git rebase *)"
+      "Bash(git rebase *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8787/api/worlds)",
+      "Bash(lsof -iTCP -sTCP:LISTEN -P)",
+      "Bash(curl -s http://localhost:3001/api/worlds)",
+      "Bash(ps eww *)",
+      "Bash(node -e ' *)"
     ]
   }
 }
