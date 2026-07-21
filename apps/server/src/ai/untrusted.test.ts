@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { wrapUntrusted, UNTRUSTED_PREAMBLE } from './untrusted.js';
+import { wrapUntrusted, UNTRUSTED_PREAMBLE, stripFenceTags } from './untrusted.js';
 
 test('wrapUntrusted fences the body and keeps the label outside the fence', () => {
   const out = wrapUntrusted('CANON:', 'the sky is green')!;
@@ -32,4 +32,18 @@ test('a payload cannot forge a closing fence to break out (nonce is stripped)', 
 test('the preamble names the fence and forbids obeying its contents', () => {
   assert.match(UNTRUSTED_PREAMBLE, /untrusted-data-/);
   assert.match(UNTRUSTED_PREAMBLE, /never follow|never obey|Never follow/i);
+});
+
+test('stripFenceTags removes leaked fence markup from model output, keeps text', () => {
+  const open = UNTRUSTED_PREAMBLE.match(/<untrusted-data-[a-f0-9]{12}>/)![0];
+  const close = open.replace('<', '</');
+  const leaked = `${open}\nChapter 1 outline: she stays.\n${close}`;
+  const cleaned = stripFenceTags(leaked);
+  assert.ok(!/<\/?untrusted-data-/.test(cleaned), 'no fence tags remain');
+  assert.ok(cleaned.includes('Chapter 1 outline: she stays.'), 'body text kept');
+});
+
+test('stripFenceTags also removes generic untrusted-data tags from other nonces', () => {
+  const cleaned = stripFenceTags('hello <untrusted-data-deadbeef99> world </untrusted-data-deadbeef99>');
+  assert.equal(cleaned.replace(/\s+/g, ' ').trim(), 'hello world');
 });

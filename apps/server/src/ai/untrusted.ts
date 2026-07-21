@@ -53,3 +53,14 @@ export function wrapUntrusted(label: string, body: string | null | undefined): s
   if (!cleaned) return null;
   return `${label}\n${OPEN}\n${cleaned}\n${CLOSE}`;
 }
+
+/**
+ * Safety net for model OUTPUT: strip any fence tags a model may have echoed back
+ * so the scaffolding never reaches the user. Matches this process's nonce tags
+ * and, defensively, any generic `<untrusted-data-…>` variant. Only removes the
+ * tag markup; the surrounding text is kept.
+ */
+const ANY_FENCE_RE = /<\/?untrusted-data-[0-9a-f]{6,}>/gi;
+export function stripFenceTags(text: string): string {
+  return text.replace(FENCE_RE, '').replace(ANY_FENCE_RE, '');
+}

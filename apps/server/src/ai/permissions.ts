@@ -114,10 +114,24 @@ export function contractInstructions(mode: PersistedChatMode): string[] {
     lines.push('You are in DISCUSS mode. Converse only. Do NOT write manuscript prose or produce edits.');
   }
   if (baseMode(mode) === 'cowrite') {
-    lines.push('You are in CO-WRITE mode. Produce a single prose turn to continue the scene, then hand back.');
+    lines.push(
+      'You are in CO-WRITE mode. Continue the scene with a single prose turn, then hand back. ' +
+        "Write in this world: honor the premise, canon, world rules, and style below, keep the " +
+        "characters true to their definitions, and follow the author's latest message.",
+    );
   }
   if (baseMode(mode) === 'draft') {
-    lines.push('You are in DRAFT mode. Produce prose for the target chapter. You may invent concrete sensory detail, but you MUST NOT contradict or add to established canon.');
+    lines.push(
+      'You are in DRAFT mode. Write full prose for the target chapter (see CHAPTER TO WRITE). ' +
+        'Your outline is: the TARGET OUTLINE / BEATS if present; otherwise the relevant part of ' +
+        'the PREMISE synopsis — the author often outlines the whole book chapter-by-chapter in ' +
+        'the synopsis, so find the section for this chapter there and expand it into prose, ' +
+        'following it closely. Never ask the author to re-supply an outline that is already in ' +
+        'the premise/synopsis — use it. Stay inside the premise, honor the WORLD RULES and ' +
+        "CANON, match the STYLE, keep characters true, and do what the author's latest message " +
+        'asks. You may invent concrete sensory detail, but MUST NOT contradict canon or ' +
+        'substitute a different story than the premise and outline describe.',
+    );
   }
   if (baseMode(mode) === 'edit') {
     lines.push('You are in EDIT mode. Return a structured redline: the original span and your proposed replacement. Do NOT invent new plot or events — edit the existing text only.');

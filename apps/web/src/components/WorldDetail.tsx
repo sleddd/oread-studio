@@ -113,41 +113,40 @@ function FieldEditor({ f }: { f: EditableField }): JSX.Element {
     const sep = f.sep ?? ' · ';
     const arr = Array.isArray(f.value) ? (f.value as string[]) : [];
 
-    // multiDelim: accept a pasted block. If it contains quoted items (e.g.
-    // "got it," "ha,") the quotes are the delimiter — extract each "…" as one
-    // clean entry — because commas may live INSIDE the quotes. Otherwise split on
-    // newlines / commas / ·. Either way surrounding quotes and trailing
-    // punctuation are stripped. Shown one per line.
+    // multiDelim (banned words/phrases): free-typing, parse on blur, accepts
+    // pasted quoted/comma lists.
     if (f.multiDelim) {
-      const text = arr.join('\n');
-      const onChange = (raw: string) => set(parseMultiDelimList(raw));
       return (
-        <textarea
-          value={text}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={'Paste a list — "got it," "ha," … or spine, cedar, pine (commas, new lines, or ·)'}
-          style={{ ...fieldBox, minHeight: 96, resize: 'vertical' }}
+        <LineListEditor
+          value={arr}
+          onCommit={set}
+          parse={parseMultiDelimList}
+          placeholder={
+            'One per line, or paste a list — "got it," "ha," … or spine, cedar, pine.\nCleans up when you click away.'
+          }
         />
       );
     }
 
     const useNewlines = sep === '\n';
-    const text = arr.join(useNewlines ? '\n' : ' · ');
+
+    // Newline-separated lists (AI rules, beats, knowledge…): free-typing textarea
+    // that parses only on blur, so Enter / blank lines / spaces all work.
+    if (useNewlines) {
+      return <LineListEditor value={arr} onCommit={set} parse={parseLines} placeholder="One per line" />;
+    }
+
+    // "·"-separated single-line list (parses live; a single-token separator is
+    // harmless to type through).
+    const text = arr.join(' · ');
     const onChange = (raw: string) =>
       set(
         raw
-          .split(useNewlines ? '\n' : '·')
+          .split('·')
           .map((s) => s.trim())
           .filter((s) => s.length > 0),
       );
-    return useNewlines ? (
-      <textarea
-        value={text}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="one per line"
-        style={{ ...fieldBox, minHeight: 72, resize: 'vertical' }}
-      />
-    ) : (
+    return (
       <input
         value={text}
         onChange={(e) => onChange(e.target.value)}
@@ -158,6 +157,61 @@ function FieldEditor({ f }: { f: EditableField }): JSX.Element {
   }
   // text
   return <input value={asText(f.value)} onChange={(e) => set(e.target.value)} style={fieldBox} />;
+}
+
+/**
+ * Free-typing editor for one-per-line string lists (AI rules, banned words/
+ * phrases, beats, knowledge…). Holds raw text locally and parses into the stored
+ * string[] only on BLUR — so pressing Enter, typing spaces, or leaving a blank
+ * line all work normally instead of being eaten by the parser on every keystroke
+ * (which was stripping empty lines and blocking new lines). The draft re-syncs
+ * from the store only while NOT focused, so switching nodes refreshes it without
+ * fighting your typing. `parse` turns the raw text into the cleaned entries.
+ */
+function LineListEditor({
+  value,
+  onCommit,
+  parse,
+  placeholder,
+}: {
+  value: string[];
+  onCommit: (v: string[]) => void;
+  parse: (raw: string) => string[];
+  placeholder: string;
+}): JSX.Element {
+  const [draft, setDraft] = useState(value.join('\n'));
+  const [focused, setFocused] = useState(false);
+
+  // Re-seed from the store when the underlying list changes and we're not editing.
+  useEffect(() => {
+    if (!focused) setDraft(value.join('\n'));
+  }, [value, focused]);
+
+  const commit = () => {
+    setFocused(false);
+    const parsed = parse(draft);
+    onCommit(parsed);
+    setDraft(parsed.join('\n')); // normalize what's shown to the cleaned entries
+  };
+
+  return (
+    <textarea
+      value={draft}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      placeholder={placeholder}
+      style={{ ...fieldBox, minHeight: 96, resize: 'vertical' }}
+    />
+  );
+}
+
+/** Split a one-per-line block: trim each line, drop blanks. Used on blur. */
+function parseLines(raw: string): string[] {
+  return raw
+    .split('\n')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 }
 
 /**

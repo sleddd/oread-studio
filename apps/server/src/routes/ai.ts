@@ -51,11 +51,15 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
     const world = await store.getWorld(ctxOf(req), body.worldId);
     if (!world) return reply.code(404).send({ error: 'world not found' });
 
-    // Load target chapter prose for context (if any).
+    // Load target chapter prose + its structure link for context (if any). The
+    // prose row's `chapter_id` points at world.structure.chapters[].id, letting the
+    // context builder pull the chapter's outline metadata (title/summary/purpose).
     let targetText: string | undefined;
+    let targetChapterMetaId: string | undefined;
     if (body.targetChapterId) {
       const ch = await store.getChapter(ctxOf(req), body.targetChapterId);
       targetText = ch?.content;
+      targetChapterMetaId = ch?.chapter_id;
     }
 
     reply.raw.writeHead(200, {
@@ -76,6 +80,7 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
         messages: body.messages,
         targetChapterId: body.targetChapterId,
         targetChapterText: targetText,
+        targetChapterMetaId,
         allowWebSearch: body.allowWebSearch,
         onDelta: (t) => sse('delta', { text: t }),
       });

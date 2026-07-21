@@ -119,6 +119,7 @@ export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
 // droppable context and appears here.
 export const DEFAULT_CONTEXT_RECIPES: ContextRecipes = {
   cowrite: [
+    'premise',
     'recentScenesVerbatim:2',
     'characterStates:present',
     'openThreads',
@@ -127,6 +128,11 @@ export const DEFAULT_CONTEXT_RECIPES: ContextRecipes = {
     'styleNotes',
   ],
   draft: [
+    // premise carries the synopsis, where the author's chapter-by-chapter outline
+    // usually lives; targetChapterMeta names WHICH chapter to write; targetOutlineBeats
+    // is any per-chapter outline text (often empty — the synopsis is the real outline).
+    'premise',
+    'targetChapterMeta',
     'targetOutlineBeats',
     'canon',
     'worldRules',

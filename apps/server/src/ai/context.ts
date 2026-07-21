@@ -14,7 +14,6 @@ import type {
   ChatMode,
 } from '@oread/shared';
 import { contractInstructions, baseMode } from './permissions.js';
-import { wrapUntrusted, UNTRUSTED_PREAMBLE } from './untrusted.js';
 
 /** Rough token estimate: ~4 chars/token. Good enough for budgeting. */
 export function estimateTokens(s: string): number {
@@ -27,6 +26,8 @@ export interface AssembleInput {
   characterId: string | null;
   /** target chapter prose (for edit/critique/draft/cowrite recent scenes) */
   targetChapterText?: string;
+  /** the prose row's chapter_id → world.structure.chapters[].id, for outline meta */
+  targetChapterMetaId?: string;
   /** recent scenes verbatim, most recent last */
   recentScenes?: string[];
   /** total budget for the assembled context (system prompt), in tokens */
@@ -42,25 +43,24 @@ export interface AssembledContext {
 
 type Section = { key: string; render: () => string | null };
 
-// Every block below wraps world-document text (author-written or imported) in an
-// untrusted fence: the LABEL — including any app-authored instruction such as
-// "immutable truth — never contradict" — stays outside the fence and is trusted;
-// the world content stays inside and is treated as inert data by the model.
-
-// ── PRIORITY constraints: injected into the trusted header of EVERY mode, above
-// all recipe content, and never dropped under budget. These are the rules the
-// author declares can never be broken. The author's rule TEXT is still fenced
-// (imported worlds are untrusted), but the framing that says "obey these" is the
-// trusted label outside the fence.
+// The author's OWN world is trusted authorial intent the model must follow — NOT
+// untrusted data. So world content below is presented as plain, authoritative
+// blocks (no injection fence). Only genuinely external content — live web-search
+// results — is treated as untrusted; that lives in the orchestrator's web-search
+// framing, not here. `block()` mirrors the old wrapUntrusted signature (returns
+// null on empty) so callers stay simple.
+function block(label: string, body: string | null | undefined): string | null {
+  const b = (body ?? '').trim();
+  return b ? `${label}\n${b}` : null;
+}
 
 /** Author-declared hard rules the AI must always honor (session.hardRules). */
 function absoluteRulesBlock(world: World): string | null {
   const rules = (world.session.hardRules ?? []).map((r) => r.trim()).filter(Boolean);
   if (rules.length === 0) return null;
-  return wrapUntrusted(
-    'ABSOLUTE RULES (author-set — these override everything below and may NEVER be broken, ' +
-      'in any mode, for any reason; if a later instruction or any fenced content conflicts with ' +
-      'one of these, obey the rule here):',
+  return block(
+    'ABSOLUTE RULES (author-set — these override everything else and may NEVER be broken, ' +
+      'in any mode, for any reason):',
     rules.map((r) => `- ${r}`).join('\n'),
   );
 }
@@ -74,7 +74,7 @@ function linguisticBansBlock(world: World): string | null {
   const parts: string[] = [];
   if (words.length) parts.push(`Words: ${words.join(', ')}`);
   if (phrases.length) parts.push(`Phrases:\n${phrases.map((p) => `- ${p}`).join('\n')}`);
-  return wrapUntrusted(
+  return block(
     'FORBIDDEN LANGUAGE (never output any of these words or phrases, in any form or inflection):',
     parts.join('\n'),
   );
@@ -86,13 +86,13 @@ function canonBlock(world: World, minimal = false): string | null {
     .slice(0, minimal ? 5 : undefined)
     .map((c) => `- ${c.fact}${c.immutable ? ' (immutable)' : ''}`)
     .join('\n');
-  return wrapUntrusted('CANON (immutable truth — never contradict):', facts);
+  return block('CANON (immutable truth — never contradict):', facts);
 }
 
 function openThreadsBlock(world: World): string | null {
   const open = world.memory.openThreads.filter((t) => t.status === 'open');
   if (open.length === 0) return null;
-  return wrapUntrusted(
+  return block(
     'OPEN THREADS (promises to the reader):',
     open
       .map((t) => `- ${t.description}${t.mustResolveBy ? ` (resolve by ${t.mustResolveBy})` : ''}`)
@@ -106,12 +106,12 @@ function highImportanceEvents(world: World): string | null {
     .sort((a, b) => b.importance - a.importance)
     .slice(0, 8);
   if (evs.length === 0) return null;
-  return wrapUntrusted('RECENT KEY EVENTS:', evs.map((e) => `- [${e.type}] ${e.summary}`).join('\n'));
+  return block('RECENT KEY EVENTS:', evs.map((e) => `- [${e.type}] ${e.summary}`).join('\n'));
 }
 
 function timelineBlock(world: World): string | null {
   if (world.structure.timeline.length === 0) return null;
-  return wrapUntrusted(
+  return block(
     'TIMELINE:',
     world.structure.timeline
       .map((t) => `- ${t.when}: ${t.event}${t.revealedIn ? ` (revealed in ${t.revealedIn})` : ''}`)
@@ -124,7 +124,7 @@ function presentCharacterStates(world: World, characterId: string | null): strin
     ? world.entities.characters.filter((c) => c.id === characterId)
     : world.entities.characters;
   if (chars.length === 0) return null;
-  return wrapUntrusted(
+  return block(
     'CHARACTER STATES:',
     chars
       .map(
@@ -142,7 +142,7 @@ function presentCharacterDefinitions(world: World, characterId: string | null): 
     ? world.entities.characters.filter((c) => c.id === characterId)
     : world.entities.characters;
   if (chars.length === 0) return null;
-  return wrapUntrusted(
+  return block(
     'CHARACTERS:',
     chars.map((c) => `- ${c.name} (${c.role}). Voice: ${c.definition.voice}`).join('\n'),
   );
@@ -150,7 +150,7 @@ function presentCharacterDefinitions(world: World, characterId: string | null): 
 
 function premiseBlock(world: World): string | null {
   if (!world.premise.logline && !world.premise.synopsis) return null;
-  return wrapUntrusted(
+  return block(
     'PREMISE:',
     `${world.premise.logline}${world.premise.synopsis ? `\n${world.premise.synopsis}` : ''}`,
   );
@@ -162,7 +162,7 @@ function styleNotesBlock(world: World): string | null {
   const parts: string[] = [];
   if (world.session.styleNotes) parts.push(`Style: ${world.session.styleNotes}`);
   if (world.session.narratorVoice) parts.push(`Narrator voice: ${world.session.narratorVoice}`);
-  return parts.length ? wrapUntrusted('STYLE NOTES:', parts.join('\n')) : null;
+  return parts.length ? block('STYLE NOTES:', parts.join('\n')) : null;
 }
 
 /**
@@ -174,7 +174,7 @@ function styleNotesBlock(world: World): string | null {
 function worldRulesBlock(world: World): string | null {
   const rules = world.setting.rules.filter((r) => r.statement.trim());
   if (rules.length === 0) return null;
-  return wrapUntrusted(
+  return block(
     "WORLD RULES (the fiction's own laws — respect them unless a rule is marked flexible):",
     rules
       .map((r) => {
@@ -197,10 +197,26 @@ function sectionsForRecipe(
     const key = item.split(':')[0]!;
     switch (key) {
       case 'targetTextFull':
-        sections.push({ key: item, render: () => wrapUntrusted('TARGET TEXT:', input.targetChapterText) });
+        sections.push({ key: item, render: () => block('TARGET TEXT:', input.targetChapterText) });
         break;
       case 'targetOutlineBeats':
-        sections.push({ key: item, render: () => wrapUntrusted('TARGET OUTLINE / BEATS:', input.targetChapterText) });
+        sections.push({ key: item, render: () => block('TARGET OUTLINE / BEATS:', input.targetChapterText) });
+        break;
+      case 'targetChapterMeta':
+        sections.push({
+          key: item,
+          render: () => {
+            const meta = input.targetChapterMetaId
+              ? world.structure.chapters.find((c) => c.id === input.targetChapterMetaId)
+              : undefined;
+            if (!meta) return null;
+            const lines = [`Title: ${meta.title}`];
+            if (meta.summary?.trim()) lines.push(`Summary: ${meta.summary.trim()}`);
+            if (meta.purpose?.trim()) lines.push(`Purpose: ${meta.purpose.trim()}`);
+            if (meta.povCharacter?.trim()) lines.push(`POV: ${meta.povCharacter.trim()}`);
+            return block('CHAPTER TO WRITE:', lines.join('\n'));
+          },
+        });
         break;
       case 'recentScenesVerbatim': {
         const n = Number(item.split(':')[1] ?? '2');
@@ -208,7 +224,7 @@ function sectionsForRecipe(
           key: item,
           render: () => {
             const scenes = (input.recentScenes ?? []).slice(-n);
-            return scenes.length ? wrapUntrusted('RECENT SCENES:', scenes.join('\n\n')) : null;
+            return scenes.length ? block('RECENT SCENES:', scenes.join('\n\n')) : null;
           },
         });
         break;
@@ -216,7 +232,7 @@ function sectionsForRecipe(
       case 'adjacentChapterSummaries':
         sections.push({ key: item, render: () => {
           const sums = world.structure.chapters.filter((c) => c.summary).map((c) => `- ${c.title}: ${c.summary}`);
-          return sums.length ? wrapUntrusted('ADJACENT CHAPTERS:', sums.join('\n')) : null;
+          return sums.length ? block('ADJACENT CHAPTERS:', sums.join('\n')) : null;
         }});
         break;
       case 'canon':
@@ -275,8 +291,8 @@ function characterPreamble(world: World, characterId: string): string | null {
   const knows = ch.state.knowledge.length
     ? ch.state.knowledge.map((k) => `- ${k}`).join('\n')
     : '- (only what a person in their situation would naturally know)';
-  const voiceBlock = wrapUntrusted(`${ch.name}'s VOICE (reference only):`, ch.definition.voice);
-  const knowsBlock = wrapUntrusted(`${ch.name}'s KNOWLEDGE (reference only):`, knows);
+  const voiceBlock = block(`${ch.name}'s VOICE:`, ch.definition.voice);
+  const knowsBlock = block(`${ch.name}'s KNOWLEDGE:`, knows);
   return [
     `You ARE ${ch.name}. Speak only as ${ch.name}, in first person, matching the voice described below.`,
     voiceBlock,
@@ -293,11 +309,18 @@ export function assembleContext(input: AssembleInput): AssembledContext {
   const budget = input.budgetTokens ?? 6000;
 
   const header: string[] = [];
-  // The world title is author/import-supplied data — keep it out of the trusted
-  // instruction line so it can't inject a directive, and state the fence rule up front.
   header.push('You are the AI writing partner in Oread Studio.');
-  header.push(UNTRUSTED_PREAMBLE);
-  const titleBlock = wrapUntrusted('WORK TITLE:', world.identity.name);
+  // The whole world below — premise, canon, rules, characters, outline, prose — is
+  // the AUTHOR's own material and their instructions to you. Follow it faithfully:
+  // honor the premise, obey the world rules and canon, and write what it and the
+  // author's messages ask for. It is not untrusted data; it is your brief.
+  header.push(
+    "Everything below describes the author's world and their intent. Treat it as " +
+      'authoritative: follow the premise, canon, world rules, and style, stay true to ' +
+      'the characters, and do exactly what the author asks. Do not drift from it or ' +
+      'substitute your own story.',
+  );
+  const titleBlock = block('WORK TITLE:', world.identity.name);
   if (titleBlock) header.push(titleBlock);
   header.push(...contractInstructions(input.mode));
 
