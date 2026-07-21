@@ -35,6 +35,12 @@ export interface EditableField {
   options?: string[];
   /** for lists: join/split separator */
   sep?: string;
+  /**
+   * for lists: accept MULTIPLE delimiters on input (newlines, commas, and ·) so a
+   * pasted comma/quote-delimited block splits correctly. Items are stored verbatim
+   * (quotes/parentheticals kept), displayed one per line. Used for banned words/phrases.
+   */
+  multiDelim?: boolean;
 }
 export interface DetailGroup {
   heading: string;
@@ -100,6 +106,38 @@ const F = (
   kind: FieldKind = 'text',
   extra?: Partial<EditableField>,
 ): EditableField => ({ label, path, value: value ?? (kind === 'list' ? [] : ''), kind, ...extra });
+
+/**
+ * Parse a pasted banned-words/phrases block into clean entries.
+ *
+ * If the text contains quoted items — e.g. `"got it," "ha," "my bad"` — the
+ * quotes are treated as the delimiters and each quoted run becomes one entry.
+ * This is necessary because commas often sit INSIDE the quotes ("got it,"), so a
+ * plain comma split would cut mid-item. Straight and curly quotes are supported.
+ *
+ * With no quotes, the text is split on newlines, commas, and · . In both cases
+ * each entry is trimmed and stripped of surrounding quotes + trailing separators
+ * so matching sees the bare word/phrase (e.g. `ha`, not `"ha,"`). A trailing
+ * parenthetical like "(in any form)" is left attached to its word (it's a
+ * qualifier the author wrote, e.g. "coming (in any form)").
+ */
+export function parseMultiDelimList(raw: string): string[] {
+  const clean = (s: string): string =>
+    s
+      .trim()
+      .replace(/^["“”']+|["“”']+$/g, '') // surrounding quotes
+      .replace(/[,;.\s]+$/g, '') // trailing separators/space
+      .trim();
+
+  if (/["“”]/.test(raw)) {
+    const quoted = [...raw.matchAll(/["“]([^"“”]+)["”]/g)].map((m) => clean(m[1]!)).filter(Boolean);
+    if (quoted.length > 0) return quoted;
+  }
+  return raw
+    .split(/[\n,·]/)
+    .map(clean)
+    .filter(Boolean);
+}
 
 /** camelCase object key → human label, e.g. "suggestRewrites" → "Suggest rewrites". */
 function humanizeKey(key: string): string {
@@ -603,8 +641,8 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
         F('Narrator voice', 'world.session.narratorVoice', sess.narratorVoice),
         F('AI rules — never broken (one per line)', 'world.session.hardRules', sess.hardRules, 'list', { sep: '\n' }),
         F('Style notes', 'world.session.styleNotes', sess.styleNotes, 'long'),
-        F('Banned words (never output)', 'world.session.linguisticFilters.bannedWords', sess.linguisticFilters.bannedWords, 'list'),
-        F('Banned phrases (one per line)', 'world.session.linguisticFilters.bannedPhrases', sess.linguisticFilters.bannedPhrases, 'list', { sep: '\n' }),
+        F('Banned words (comma, newline, or · — quotes kept)', 'world.session.linguisticFilters.bannedWords', sess.linguisticFilters.bannedWords, 'list', { multiDelim: true }),
+        F('Banned phrases (comma, newline, or · — quotes kept)', 'world.session.linguisticFilters.bannedPhrases', sess.linguisticFilters.bannedPhrases, 'list', { multiDelim: true }),
       ],
     };
 

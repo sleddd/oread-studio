@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../state/store.js';
-import { nodeDetail, asText, type EditableField } from '../state/nodeDetail.js';
+import { nodeDetail, asText, parseMultiDelimList, type EditableField } from '../state/nodeDetail.js';
 import { PROVIDER_MODELS } from '@oread/shared';
 import { credentials as credApi } from '../api/index.js';
 
@@ -112,6 +112,25 @@ function FieldEditor({ f }: { f: EditableField }): JSX.Element {
   if (f.kind === 'list') {
     const sep = f.sep ?? ' · ';
     const arr = Array.isArray(f.value) ? (f.value as string[]) : [];
+
+    // multiDelim: accept a pasted block. If it contains quoted items (e.g.
+    // "got it," "ha,") the quotes are the delimiter — extract each "…" as one
+    // clean entry — because commas may live INSIDE the quotes. Otherwise split on
+    // newlines / commas / ·. Either way surrounding quotes and trailing
+    // punctuation are stripped. Shown one per line.
+    if (f.multiDelim) {
+      const text = arr.join('\n');
+      const onChange = (raw: string) => set(parseMultiDelimList(raw));
+      return (
+        <textarea
+          value={text}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={'Paste a list — "got it," "ha," … or spine, cedar, pine (commas, new lines, or ·)'}
+          style={{ ...fieldBox, minHeight: 96, resize: 'vertical' }}
+        />
+      );
+    }
+
     const useNewlines = sep === '\n';
     const text = arr.join(useNewlines ? '\n' : ' · ');
     const onChange = (raw: string) =>
