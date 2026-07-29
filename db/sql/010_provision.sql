@@ -131,6 +131,8 @@ BEGIN
                      ('cowrite','draft','edit','critique','discuss','character')),
       character_id TEXT,
       messages     JSONB NOT NULL,
+      -- Legacy: chat distillation was removed; always false. Kept so existing
+      -- user schemas need no migration. Nothing reads or writes it.
       distilled    BOOLEAN NOT NULL DEFAULT false,
       saved_at     TIMESTAMPTZ NOT NULL DEFAULT now()
     )$t$, p_schema, p_schema);

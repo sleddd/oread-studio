@@ -121,7 +121,12 @@ export interface ChatRow {
   mode: PersistedChatMode;
   character_id: string | null;
   messages: ChatMessage[];
-  distilled: boolean;
+  /**
+   * @deprecated Legacy. Chat distillation was removed — saving a chat writes the
+   * transcript only. The column still exists (always false) so existing rows and
+   * provisioned schemas keep working; nothing reads it.
+   */
+  distilled?: boolean;
   saved_at: string;
 }
 

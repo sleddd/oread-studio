@@ -145,7 +145,6 @@ export interface WorldStore {
   // ── chats ──
   listChats(ctx: StoreCtx, worldId: string): Promise<ChatRow[]>;
   saveChat(ctx: StoreCtx, input: SaveChatInput): Promise<ChatRow>;
-  markChatDistilled(ctx: StoreCtx, chatId: string): Promise<void>;
   getChat(ctx: StoreCtx, chatId: string): Promise<ChatRow | null>;
   deleteChat(ctx: StoreCtx, chatId: string): Promise<void>;
 }

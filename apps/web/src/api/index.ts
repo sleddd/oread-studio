@@ -72,13 +72,15 @@ export const chapters = {
     api.post<{ chapter: ChapterRow }>(`/api/worlds/${worldId}/manuscripts/${mid}/chapters`, b),
   createInManuscript: (mid: string, b: { chapterId: string; content?: string; status?: ChapterStatusDb }) =>
     api.post<{ chapter: ChapterRow }>(`/api/manuscripts/${mid}/chapters`, b),
-  saveContent: (cid: string, content: string) =>
-    api.put<{ chapter: ChapterRow }>(`/api/chapters/${cid}/content`, { content }),
+  saveContent: (cid: string, content: string, reason?: 'autosave' | 'manual') =>
+    api.put<{ chapter: ChapterRow }>(`/api/chapters/${cid}/content`, { content, reason }),
   updateMeta: (cid: string, b: { status?: ChapterStatusDb; order?: number; chapter_id?: string }) =>
     api.patch<{ ok: boolean }>(`/api/chapters/${cid}`, b),
   remove: (cid: string) => api.del<{ ok: boolean }>(`/api/chapters/${cid}`),
   revisions: (cid: string) =>
     api.get<{ revisions: ChapterRevisionRow[] }>(`/api/chapters/${cid}/revisions`),
+  restore: (cid: string, revisionId: string) =>
+    api.post<{ chapter: ChapterRow }>(`/api/chapters/${cid}/restore`, { revisionId }),
 };
 
 export const credentials = {
@@ -101,8 +103,7 @@ export const chats = {
     mode: PersistedChatMode;
     characterId: string | null;
     messages: ChatMessage[];
-    chapterContext?: string;
-  }) => api.post<{ chat: ChatRow; newEvents: number }>('/api/chats', b),
+  }) => api.post<{ chat: ChatRow }>('/api/chats', b),
   remove: (chatId: string) => api.del<{ ok: boolean }>(`/api/chats/${chatId}`),
 };
 

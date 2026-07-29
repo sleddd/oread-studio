@@ -16,9 +16,6 @@ import type {
   CanonFact,
   OpenThread,
   Decision,
-  Scene,
-  TimelineEntry,
-  MemoryEvent,
 } from '@oread/shared';
 
 let seq = 0;
@@ -42,7 +39,7 @@ export function makeCharacter(): Character {
       wounds: '',
       contradiction: '',
     },
-    state: { location: '', status: '', emotionalState: '', knowledge: [], inventory: [] },
+    state: { location: [], status: '', emotionalState: '', knowledge: [], inventory: [] },
     arc: { startingPoint: '', trajectory: '', endpoint: '' },
   };
 }
@@ -90,33 +87,6 @@ export function makeThread(): OpenThread {
 export function makeDecision(): Decision {
   return { id: newId('dec'), decision: 'New decision', reasoning: '', date: new Date().toISOString().slice(0, 10) };
 }
-export function makeScene(): Scene {
-  return {
-    id: newId('scn'),
-    chapterId: '',
-    location: '',
-    charactersPresent: [],
-    summary: 'New scene',
-    beats: [],
-    timelinePosition: '',
-  };
-}
-export function makeTimelineEntry(): TimelineEntry {
-  return { id: newId('tl'), when: '', event: 'New event', revealedIn: '' };
-}
-export function makeEvent(): MemoryEvent {
-  return {
-    id: newId('mem'),
-    timestamp: new Date().toISOString(),
-    type: 'plot',
-    summary: 'New event',
-    detail: '',
-    entities: [],
-    chapterContext: '',
-    importance: 3,
-  };
-}
-
 /** Which section a node key belongs to, for the "+ Add" buttons in the tree. */
 export type AddableKind =
   | 'character'
@@ -127,10 +97,7 @@ export type AddableKind =
   | 'source'
   | 'canon'
   | 'thread'
-  | 'decision'
-  | 'scene'
-  | 'timeline'
-  | 'event';
+  | 'decision';
 
 /** Append a new entity of `kind` to a draft world doc; returns [draft, nodeKey]. */
 export function addEntity(
@@ -182,18 +149,6 @@ export function addEntity(
       w.memory.decisions.push(makeDecision());
       return { doc: d, nodeKey: 'decisions' };
     }
-    case 'event': {
-      w.memory.events.push(makeEvent());
-      return { doc: d, nodeKey: 'mem' };
-    }
-    case 'scene': {
-      w.structure.scenes.push(makeScene());
-      return { doc: d, nodeKey: 'scene:' + w.structure.scenes[w.structure.scenes.length - 1]!.id };
-    }
-    case 'timeline': {
-      w.structure.timeline.push(makeTimelineEntry());
-      return { doc: d, nodeKey: 'timeline' };
-    }
   }
 }
 
@@ -208,12 +163,10 @@ export function deleteEntity(doc: WorldDocument, nodeKey: string): WorldDocument
   else if (type === 'rel') w.entities.relationships = w.entities.relationships.filter((r) => r.id !== id);
   else if (type === 'concept') w.entities.concepts = w.entities.concepts.filter((c) => c.id !== id);
   else if (type === 'source') w.entities.sources = w.entities.sources.filter((s) => s.id !== id);
-  else if (type === 'scene') w.structure.scenes = w.structure.scenes.filter((s) => s.id !== id);
   else if (type === 'ch') w.structure.chapters = w.structure.chapters.filter((c) => c.id !== id);
-  // Memory items use collective list nodes (mem/canon/threads/decisions), so
-  // per-item deletes carry a typed 'event:'/'canon:'/'thread:'/'decision:' key.
+  // Memory items use collective list nodes (canon/threads/decisions), so
+  // per-item deletes carry a typed 'canon:'/'thread:'/'decision:' key.
   // (Removing outline metadata; prose ChapterRows live in a separate table.)
-  else if (type === 'event') w.memory.events = w.memory.events.filter((e) => e.id !== id);
   else if (type === 'canon') w.memory.canon = w.memory.canon.filter((c) => c.id !== id);
   else if (type === 'thread') w.memory.openThreads = w.memory.openThreads.filter((t) => t.id !== id);
   else if (type === 'decision') w.memory.decisions = w.memory.decisions.filter((d) => d.id !== id);

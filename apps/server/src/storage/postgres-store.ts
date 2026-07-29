@@ -436,13 +436,12 @@ export class PostgresStore implements WorldStore {
 
   async saveChat(ctx: StoreCtx, input: SaveChatInput): Promise<ChatRow> {
     return withUserSchema(ctx.schemaName, async (c) => {
-      // Continued chat: update the existing row in place. Messages changed, so
-      // reset distilled=false — the caller re-runs distillation on every save.
+      // Continued chat: update the existing row in place.
       if (input.chatId) {
         const { rows } = await c.query<ChatRow>(
           `UPDATE chats
               SET title = $2, mode = $3, character_id = $4, messages = $5,
-                  distilled = false, saved_at = now()
+                  saved_at = now()
             WHERE id = $1 AND world_id = $6
           RETURNING *`,
           [
@@ -469,12 +468,6 @@ export class PostgresStore implements WorldStore {
         ],
       );
       return rows[0]!;
-    });
-  }
-
-  async markChatDistilled(ctx: StoreCtx, chatId: string): Promise<void> {
-    await withUserSchema(ctx.schemaName, async (c) => {
-      await c.query('UPDATE chats SET distilled = true WHERE id = $1', [chatId]);
     });
   }
 

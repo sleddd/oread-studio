@@ -146,16 +146,13 @@ export const DEFAULT_CONTEXT_RECIPES: ContextRecipes = {
     'canon',
     'worldRules',
     'openThreads',
-    'timeline',
     'characterStates:present',
   ],
-  discuss: [
-    'premise',
-    'canonSummary',
-    'worldRules',
-    'openThreads',
-    'recentEvents:high-importance',
-  ],
+  // 'recentEvents:high-importance' is deliberately absent: the event log is no
+  // longer authored anywhere in the UI, so it would be an empty section on every
+  // new world. The renderer still handles the item for worlds whose saved recipe
+  // names it and whose memory.events still has entries.
+  discuss: ['premise', 'canonSummary', 'worldRules', 'openThreads'],
 };
 
 export const DEFAULT_MEMORY_WRITEBACK: MemoryWriteback = {

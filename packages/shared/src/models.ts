@@ -62,11 +62,3 @@ export const PROVIDER_MODELS: Record<Provider, ModelOption[]> = {
   ],
 };
 
-/** The cheap model recommended for the chat-distillation pass, per provider. */
-export const DISTILL_MODEL_BY_PROVIDER: Record<Provider, string> = {
-  anthropic: 'claude-haiku-4-5',
-  openai: 'gpt-4o-mini',
-  bedrock: 'anthropic.claude-haiku-4-5',
-  cloudflare: '@cf/meta/llama-3.1-8b-instruct',
-  local: 'llama3.1',
-};

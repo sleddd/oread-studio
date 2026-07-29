@@ -136,7 +136,7 @@
         },
         "structure": {
           "type": "object",
-          "required": ["chapters", "scenes", "timeline"],
+          "required": ["chapters"],
           "additionalProperties": true,
           "properties": {
             "chapters": {
@@ -154,8 +154,14 @@
                 }
               }
             },
-            "scenes": { "type": "array" },
-            "timeline": { "type": "array" }
+            "scenes": {
+              "type": "array",
+              "description": "Legacy: accepted on existing documents, never produced or edited by the app."
+            },
+            "timeline": {
+              "type": "array",
+              "description": "Legacy: accepted on existing documents, never produced or edited by the app."
+            }
           }
         },
         "memory": {

@@ -92,9 +92,6 @@ export const env = {
       // needs a full origin, so prepend https:// when a scheme is missing.
       .map((s) => (/^https?:\/\//.test(s) ? s : `https://${s}`));
   },
-  get distillModel(): string {
-    return process.env.DISTILL_MODEL ?? 'claude-haiku-4-5-20251001';
-  },
   provider: {
     get anthropicKey() {
       return process.env.ANTHROPIC_API_KEY;

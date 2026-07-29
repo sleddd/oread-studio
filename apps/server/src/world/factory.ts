@@ -82,7 +82,9 @@ export function emptyWorld(name = 'Untitled World'): WorldDocument {
         concepts: [],
         sources: [],
       },
-      structure: { chapters: [], scenes: [], timeline: [] },
+      // scenes/timeline are legacy: not created for new worlds, but preserved
+      // untouched on documents that still carry them.
+      structure: { chapters: [] },
       memory: { events: [], canon: [], openThreads: [], decisions: [] },
       suggestions: [],
       session: defaultSession(),

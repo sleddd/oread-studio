@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useStore } from '../state/store.js';
 import { WRITING_FORMATS, FORMAT_SPECS, editorTypography } from '@oread/shared';
 import type { WritingFormat } from '@oread/shared';
+import { RevisionHistory } from './RevisionHistory.js';
 
 const chapterActionStyle = (enabled: boolean, fontSize: number) => ({
   flex: '0 0 auto' as const,
@@ -19,6 +21,7 @@ const chapterActionStyle = (enabled: boolean, fontSize: number) => ({
 
 export function WriteView(): JSX.Element {
   const store = useStore();
+  const [historyOpen, setHistoryOpen] = useState(false);
   const chapter = store.activeChapter;
   const meta = store.world?.world.structure.chapters.find((c) => c.id === chapter?.chapter_id);
   const type = editorTypography(store.format, store.proseTypeface);
@@ -29,6 +32,7 @@ export function WriteView(): JSX.Element {
     <>
       <div
         style={{
+          position: 'relative', // anchors the revision-history popover
           flex: '0 0 auto',
           display: 'flex',
           alignItems: 'center',
@@ -137,9 +141,17 @@ export function WriteView(): JSX.Element {
           </div>
           <div style={{ width: 1, height: 34, background: '#1e2222' }} />
           <button
+            onClick={() => setHistoryOpen((o) => !o)}
+            disabled={!chapter}
+            title="Browse and restore earlier versions of this chapter"
+            style={chapterActionStyle(!!chapter, 13)}
+          >
+            History
+          </button>
+          <button
             onClick={() => void store.saveDraft()}
             disabled={!chapter}
-            title="Save this chapter now (also autosaves as you type)"
+            title="Save a draft point now — kept in history and never auto-pruned"
             style={{
               fontSize: 13.5,
               fontWeight: 700,
@@ -154,6 +166,7 @@ export function WriteView(): JSX.Element {
             Save Draft
           </button>
         </div>
+        {historyOpen && chapter && <RevisionHistory onClose={() => setHistoryOpen(false)} />}
       </div>
       <div
         style={{

@@ -1,6 +1,6 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FileStore } from './file-store.js';
@@ -25,6 +25,8 @@ function minimalWorld(name: string): WorldDocument {
       premise: { logline: '', synopsis: '', themes: [], genre: [], tone: '' },
       setting: { lore: '', timePeriod: '', locations: [], rules: [] },
       entities: { characters: [], relationships: [], factions: [], concepts: [], sources: [] },
+      // Legacy shape on purpose: scenes/timeline are retired from the interface,
+      // and a doc that still carries them must keep round-tripping through the store.
       structure: { chapters: [], scenes: [], timeline: [] },
       memory: { events: [], canon: [], openThreads: [], decisions: [] },
       suggestions: [],
@@ -91,6 +93,49 @@ test('prune removes old autosave revisions but keeps pre_ai_* forever', async ()
   assert.equal(revs.length, 2);
 });
 
+test("prune keeps 'manual' draft points as well as pre_ai_*", async () => {
+  const wid = await store.createWorld(ctx, 'W', minimalWorld('W'));
+  const ms = await store.createManuscript(ctx, wid, {});
+  const ch = await store.createChapter(ctx, wid, ms.id, { chapterId: 'ch_001', content: 'a' });
+  await store.snapshotChapter(ctx, ch.id, 'manual');
+  await store.snapshotChapter(ctx, ch.id, 'autosave');
+  // Age everything past the prune window: only the autosave row may go.
+  const sidePath = join(dir, wid, 'store.json');
+  const side = JSON.parse(readFileSync(sidePath, 'utf8')) as {
+    revisions: { reason: string; created_at: string }[];
+  };
+  for (const r of side.revisions) r.created_at = '2020-01-01T00:00:00.000Z';
+  writeFileSync(sidePath, JSON.stringify(side));
+
+  const removed = await store.pruneAutosaveRevisions(ctx, 30);
+  assert.equal(removed, 1, 'only the old autosave is pruned');
+  const revs = await store.listChapterRevisions(ctx, ch.id);
+  assert.equal(revs.length, 1);
+  assert.equal(revs[0]!.reason, 'manual', 'the deliberate draft point survives');
+});
+
+test('restore is non-destructive: the replaced text is snapshotted first', async () => {
+  const wid = await store.createWorld(ctx, 'W', minimalWorld('W'));
+  const ms = await store.createManuscript(ctx, wid, {});
+  const ch = await store.createChapter(ctx, wid, ms.id, { chapterId: 'ch_001', content: 'draft one' });
+
+  // Author saves a draft point, then keeps writing.
+  await store.saveChapterContent(ctx, ch.id, 'draft two', 'manual');
+  const afterFirst = await store.listChapterRevisions(ctx, ch.id);
+  const draftOne = afterFirst.find((r) => r.content === 'draft one');
+  assert.ok(draftOne, 'the pre-save content was captured as a revision');
+
+  // Restore that earlier version — this is what the restore route does.
+  const restored = await store.saveChapterContent(ctx, ch.id, draftOne.content, 'manual');
+  assert.equal(restored.content, 'draft one', 'chapter now holds the restored text');
+
+  const revs = await store.listChapterRevisions(ctx, ch.id);
+  assert.ok(
+    revs.some((r) => r.content === 'draft two'),
+    'the version replaced BY the restore is itself recoverable',
+  );
+});
+
 test('delta snapshots reconstruct to the current world state', async () => {
   const wid = await store.createWorld(ctx, 'W', minimalWorld('W'));
   await store.snapshotWorld(ctx, wid, 'manual'); // #0 → full
@@ -123,7 +168,7 @@ test('rejects world ids that escape the storage root (path traversal)', async ()
   }
 });
 
-test('chats save and list, distillation flag flips', async () => {
+test('chats save and are retrievable by id', async () => {
   const wid = await store.createWorld(ctx, 'W', minimalWorld('W'));
   const chat = await store.saveChat(ctx, {
     worldId: wid,
@@ -132,13 +177,13 @@ test('chats save and list, distillation flag flips', async () => {
     characterId: 'jamie',
     messages: [{ id: 1, role: 'user', text: 'hi', time: '1:00 AM' }],
   });
-  assert.equal(chat.distilled, false);
-  await store.markChatDistilled(ctx, chat.id);
   const got = await store.getChat(ctx, chat.id);
-  assert.equal(got!.distilled, true);
+  assert.equal(got!.id, chat.id);
+  assert.equal(got!.messages.length, 1);
+  assert.equal(got!.character_id, 'jamie');
 });
 
-test('saveChat with chatId updates in place (continued chat) and resets distilled', async () => {
+test('saveChat with chatId updates in place (continued chat)', async () => {
   const wid = await store.createWorld(ctx, 'W', minimalWorld('W'));
   const chat = await store.saveChat(ctx, {
     worldId: wid,
@@ -147,7 +192,6 @@ test('saveChat with chatId updates in place (continued chat) and resets distille
     characterId: null,
     messages: [{ id: 1, role: 'user', text: 'hi', time: '1:00 AM' }],
   });
-  await store.markChatDistilled(ctx, chat.id);
 
   const updated = await store.saveChat(ctx, {
     chatId: chat.id,
@@ -163,7 +207,6 @@ test('saveChat with chatId updates in place (continued chat) and resets distille
 
   assert.equal(updated.id, chat.id, 'same row is reused, not duplicated');
   assert.equal(updated.messages.length, 2);
-  assert.equal(updated.distilled, false, 'messages changed → distilled resets');
 
   const list = await store.listChats(ctx, wid);
   assert.equal(list.length, 1, 'no duplicate row created');

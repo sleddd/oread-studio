@@ -20,6 +20,7 @@ import type {
   WorldDocument,
   ManuscriptRow,
   ChapterRow,
+  ChapterRevisionRow,
   ChatMessage,
   ChatRow,
   WritingFormat,
@@ -139,6 +140,8 @@ export interface StoreApi extends StoreState {
   deleteChapter: (cid: string) => Promise<void>;
   setChapterText: (text: string) => void;
   saveDraft: () => Promise<void>;
+  listRevisions: () => Promise<ChapterRevisionRow[]>;
+  restoreRevision: (revisionId: string) => Promise<void>;
   setFormat: (f: WritingFormat) => void;
   // world detail
   selectNode: (key: string | null) => void;
@@ -146,6 +149,7 @@ export interface StoreApi extends StoreState {
   setNavMode: (m: NavMode) => void;
   editWorldField: (path: string, value: unknown) => void;
   addWorldEntity: (kind: AddableKind) => void;
+  addCharacterNamed: (name: string) => string | null;
   deleteWorldNode: (key: string) => void;
   // settings
   setAccent: (hex: string) => void;
@@ -520,7 +524,6 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
           summary: '',
           purpose: '',
           povCharacter: '',
-          sceneIds: [],
           wordCount: row.word_count ?? 0,
         });
       }
@@ -579,17 +582,61 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     [s.chapterRowId, autosave],
   );
 
-  // Force-persist the current chapter prose now, instead of waiting for the
-  // debounced autosave. flush() writes whatever is pending in the queue.
+  /**
+   * Explicit Save Draft. Flushes any pending autosave first (so the queue can't
+   * overwrite us a moment later), then writes the current prose again with
+   * reason='manual'. That second write is the point: it marks a revision the
+   * author deliberately made, which — unlike 'autosave' checkpoints — is never
+   * pruned and shows up as a named draft point in the revision history.
+   */
   const saveDraft = useCallback(async () => {
-    if (!s.chapterRowId) return;
+    const cid = s.chapterRowId;
+    if (!cid) return;
     try {
       await autosave.flush();
+      const content = s.chaptersList.find((c) => c.id === cid)?.content ?? '';
+      const { chapter } = await apiWorlds.chapters.saveContent(cid, content, 'manual');
+      setS((prev) => ({
+        ...prev,
+        chaptersList: prev.chaptersList.map((c) => (c.id === cid ? chapter : c)),
+      }));
       showToast('Draft saved');
     } catch {
       showToast('Save failed — will keep retrying');
     }
-  }, [s.chapterRowId, autosave, showToast]);
+  }, [s.chapterRowId, s.chaptersList, autosave, showToast]);
+
+  /** Chapter revision history, newest first. */
+  const listRevisions = useCallback(async (): Promise<ChapterRevisionRow[]> => {
+    if (!s.chapterRowId) return [];
+    const { revisions } = await apiWorlds.chapters.revisions(s.chapterRowId);
+    return revisions;
+  }, [s.chapterRowId]);
+
+  /**
+   * Restore the chapter to an earlier revision. The server snapshots the current
+   * content as a 'manual' revision first, so this is itself undoable. Pending
+   * autosave is flushed beforehand — otherwise the debounce timer could fire
+   * after the restore and write the pre-restore text straight back over it.
+   */
+  const restoreRevision = useCallback(
+    async (revisionId: string) => {
+      const cid = s.chapterRowId;
+      if (!cid) return;
+      try {
+        await autosave.flush();
+        const { chapter } = await apiWorlds.chapters.restore(cid, revisionId);
+        setS((prev) => ({
+          ...prev,
+          chaptersList: prev.chaptersList.map((c) => (c.id === cid ? chapter : c)),
+        }));
+        showToast('Restored — the replaced version was saved to history');
+      } catch {
+        showToast('Restore failed');
+      }
+    },
+    [s.chapterRowId, autosave, showToast],
+  );
 
   const setFormat = useCallback(
     (f: WritingFormat) => {
@@ -742,24 +789,20 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     const mode: PersistedChatMode =
       s.mode === 'discuss' && s.character !== NARRATOR.id ? 'character' : s.mode;
     // Continuing a loaded chat updates it in place (chatId); a fresh chat inserts.
-    const { chat, newEvents } = await apiWorlds.chats.save({
+    // Saving a chat writes the transcript ONLY — it never touches the world doc,
+    // so there's nothing to reload here.
+    const { chat } = await apiWorlds.chats.save({
       chatId: s.activeChatId ?? undefined,
       worldId: s.worldId,
       title: null,
       mode,
       characterId: s.character === NARRATOR.id ? null : s.character,
       messages: s.msgs,
-      chapterContext: activeChapter?.chapter_id ?? '',
     });
-    // reload world so distilled memory events appear in the World tab
-    if (newEvents > 0) {
-      const { world } = await apiWorlds.worlds.get(s.worldId);
-      patch({ world });
-    }
     patch({ activeChatId: chat.id });
     void refreshSavedChats();
-    showToast(newEvents > 0 ? `Chat saved · ${newEvents} memory event(s)` : 'Chat saved');
-  }, [s.worldId, s.msgs, s.mode, s.character, s.activeChatId, activeChapter, patch, refreshSavedChats, showToast]);
+    showToast('Chat saved');
+  }, [s.worldId, s.msgs, s.mode, s.character, s.activeChatId, patch, refreshSavedChats, showToast]);
 
   // Start a fresh conversation. Chat is client-state (unsaved until Save Chat),
   // so this discards the current transcript unless it was saved — the caller warns.
@@ -832,6 +875,30 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     [showToast],
   );
 
+  /**
+   * Create a character with the given name and return its id, WITHOUT navigating
+   * away. Used by the relationship pickers' "add a new character" path: those
+   * store character ids, so naming someone new there has to mint a real character
+   * to point at. Stays on the current node so the author keeps editing the
+   * relationship they were in the middle of.
+   */
+  const addCharacterNamed = useCallback(
+    (name: string): string | null => {
+      const trimmed = name.trim();
+      if (!trimmed || !s.world) return null;
+      const { doc, nodeKey } = addEntity(s.world, 'character');
+      const id = nodeKey.slice('char:'.length);
+      const draft = structuredClone(doc);
+      const made = draft.world.entities.characters.find((c) => c.id === id);
+      if (!made) return null;
+      made.name = trimmed;
+      setS((prev) => ({ ...prev, world: draft }));
+      showToast(`Added ${trimmed} — remember to Save World`);
+      return id;
+    },
+    [s.world, showToast],
+  );
+
   const deleteWorldNode = useCallback(
     (key: string) => {
       // Deleting one item from a collective memory list (event/canon/thread/
@@ -881,12 +948,15 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     deleteChapter,
     setChapterText,
     saveDraft,
+    listRevisions,
+    restoreRevision,
     setFormat,
     selectNode: (key) => patch({ selectedNode: key, view: key ? 'world' : 'write' }),
     goWrite: () => patch({ view: 'write', selectedNode: null }),
     setNavMode: (m) => patch({ navMode: m }),
     editWorldField,
     addWorldEntity,
+    addCharacterNamed,
     deleteWorldNode,
     setAccent,
     setProseTypeface: (t) => patch({ proseTypeface: t }),

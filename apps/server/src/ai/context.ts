@@ -13,6 +13,7 @@ import type {
   PersistedChatMode,
   ChatMode,
 } from '@oread/shared';
+import { characterLocations } from '@oread/shared';
 import { contractInstructions, baseMode } from './permissions.js';
 
 /** Rough token estimate: ~4 chars/token. Good enough for budgeting. */
@@ -100,8 +101,14 @@ function openThreadsBlock(world: World): string | null {
   );
 }
 
+/**
+ * Legacy. The event log is no longer authored in the UI (it existed to hold
+ * chat-distillation output, and distillation was removed), so this is absent from
+ * the default recipes — but a world saved earlier may still hold events and name
+ * the item in its saved recipe, and those keep rendering.
+ */
 function highImportanceEvents(world: World): string | null {
-  const evs = [...world.memory.events]
+  const evs = [...(world.memory.events ?? [])]
     .filter((e) => e.importance >= 4)
     .sort((a, b) => b.importance - a.importance)
     .slice(0, 8);
@@ -109,11 +116,18 @@ function highImportanceEvents(world: World): string | null {
   return block('RECENT KEY EVENTS:', evs.map((e) => `- [${e.type}] ${e.summary}`).join('\n'));
 }
 
+/**
+ * Legacy. The timeline was removed from the structure model and is no longer a
+ * default recipe item, but a world document saved before that change may still
+ * carry one — and a saved session recipe may still name 'timeline'. Both keep
+ * working rather than throwing.
+ */
 function timelineBlock(world: World): string | null {
-  if (world.structure.timeline.length === 0) return null;
+  const timeline = world.structure.timeline ?? [];
+  if (timeline.length === 0) return null;
   return block(
     'TIMELINE:',
-    world.structure.timeline
+    timeline
       .map((t) => `- ${t.when}: ${t.event}${t.revealedIn ? ` (revealed in ${t.revealedIn})` : ''}`)
       .join('\n'),
   );
@@ -127,12 +141,13 @@ function presentCharacterStates(world: World, characterId: string | null): strin
   return block(
     'CHARACTER STATES:',
     chars
-      .map(
-        (c) =>
-          `- ${c.name}: ${c.state.status || 'unknown'}, at ${c.state.location || 'unknown'}${
-            c.state.emotionalState ? `, feeling ${c.state.emotionalState}` : ''
-          }`,
-      )
+      .map((c) => {
+        // A character may be in several places at once (a ship and its cabin).
+        const where = characterLocations(c.state).join(' / ') || 'unknown';
+        return `- ${c.name}: ${c.state.status || 'unknown'}, at ${where}${
+          c.state.emotionalState ? `, feeling ${c.state.emotionalState}` : ''
+        }`;
+      })
       .join('\n'),
   );
 }

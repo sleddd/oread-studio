@@ -16,12 +16,7 @@ const SECTION_ADDS: Record<string, { kind: AddableKind; label: string }[]> = {
     { kind: 'concept', label: '+ Concept' },
     { kind: 'source', label: '+ Source' },
   ],
-  Structure: [
-    { kind: 'scene', label: '+ Scene' },
-    { kind: 'timeline', label: '+ Timeline event' },
-  ],
   Memory: [
-    { kind: 'event', label: '+ Event' },
     { kind: 'canon', label: '+ Canon' },
     { kind: 'thread', label: '+ Thread' },
     { kind: 'decision', label: '+ Decision' },

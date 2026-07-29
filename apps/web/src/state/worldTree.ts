@@ -44,16 +44,18 @@ export function worldSections(doc: WorldDocument | null): TreeSection[] {
     },
     {
       label: 'Structure',
+      // Scenes and the timeline are legacy: a world doc may still carry them, but
+      // they are deliberately not listed here and have no detail view.
       items: [
         ...w.structure.chapters.map((c) => ({ key: `ch:${c.id}`, label: c.title, type: 'chapter' })),
-        ...w.structure.scenes.map((s) => ({ key: `scene:${s.id}`, label: s.summary.slice(0, 28), type: 'scene' })),
-        ...(w.structure.timeline.length ? [{ key: 'timeline', label: 'Timeline', type: 'timeline' }] : []),
       ],
     },
     {
       label: 'Memory',
+      // The event log is legacy: it existed to hold chat-distillation output, and
+      // distillation was removed. `world.memory.events` may still hold entries on
+      // older worlds, but there is no tree entry, no detail view, and no "+ Event".
       items: [
-        { key: 'mem', label: 'Event log', type: 'events' },
         { key: 'canon', label: 'Canon facts', type: 'canon' },
         { key: 'threads', label: 'Open threads', type: 'threads' },
         { key: 'decisions', label: 'Decisions', type: 'decisions' },

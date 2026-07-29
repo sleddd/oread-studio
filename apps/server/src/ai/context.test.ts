@@ -81,7 +81,6 @@ test('draft mode includes the premise/synopsis (where the outline lives) and the
     summary: 'Jamie and the boxes.',
     purpose: 'Meet-cute; establish the wall.',
     povCharacter: 'Claudette',
-    sceneIds: [],
     wordCount: 0,
   });
   const ctx = assembleContext({

@@ -9,20 +9,37 @@
  *  - 'long'  multi-line string
  *  - 'list'  string[] edited as a " · " / newline separated field
  *  - 'bool'  checkbox
+ *  - 'boolInv' checkbox whose LABEL states the negative of the stored flag —
+ *              shows !value and writes !checked (see canon "Can be changed…")
  *  - 'num'   number
  *  - 'enum'  select from options
  *  - 'ro'    read-only display
+ *  - 'date'  read-only ISO timestamp shown in human-readable local form
+ *  - 'multi' string[] chosen from `options`, with an "add a new one" escape hatch
+ *  - 'pick'  single choice from `choices`, which carry a display label separate
+ *            from the stored value (so ids are stored but names are shown)
+ *  - 'longlist' string[] edited as one free textarea, one entry per line
+ *  - 'proselist' string[] edited as FREE PROSE — you write paragraphs, not
+ *            entries; blank lines separate them. For fields that are stored as a
+ *            list for legacy reasons but read as writing (relationship history)
  */
 import type { WorldDocument } from '@oread/shared';
+import { characterLocations } from '@oread/shared';
 
 export type FieldKind =
   | 'text'
   | 'long'
   | 'list'
   | 'bool'
+  | 'boolInv'
+  | 'multi'
+  | 'pick'
+  | 'longlist'
+  | 'proselist'
   | 'num'
   | 'enum'
   | 'ro'
+  | 'date'
   | 'credential' // dropdown of saved credentials (session.model.credentialId)
   | 'model'; // provider model dropdown + custom (session.model.model)
 
@@ -33,6 +50,10 @@ export interface EditableField {
   path: string;
   value: unknown;
   options?: string[];
+  /** for 'pick': the stored value and the label shown for it, kept separate */
+  choices?: { value: string; label: string }[];
+  /** for 'multi'/'pick': what is being chosen ("character", "concept", "source") */
+  noun?: string;
   /** for lists: join/split separator */
   sep?: string;
   /**
@@ -105,7 +126,15 @@ const F = (
   value: unknown,
   kind: FieldKind = 'text',
   extra?: Partial<EditableField>,
-): EditableField => ({ label, path, value: value ?? (kind === 'list' ? [] : ''), kind, ...extra });
+): EditableField => ({
+  label,
+  path,
+  value:
+    value ??
+    (kind === 'list' || kind === 'multi' || kind === 'longlist' || kind === 'proselist' ? [] : ''),
+  kind,
+  ...extra,
+});
 
 /**
  * Parse a pasted banned-words/phrases block into clean entries.
@@ -173,9 +202,10 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
             F('Mode', 'world.identity.mode', w.identity.mode, 'enum', {
               options: ['fiction', 'nonfiction', 'roleplay', 'hybrid'],
             }),
-            F('ID', 'world.identity.id', w.identity.id, 'ro'),
-            F('Created', 'world.identity.created', w.identity.created, 'ro'),
-            F('Last modified', 'world.identity.lastModified', w.identity.lastModified, 'ro'),
+            // identity.id is deliberately not shown — it's an internal handle the
+            // author never needs, and it's read-only anyway. Still stored/persisted.
+            F('Created', 'world.identity.created', w.identity.created, 'date'),
+            F('Last modified', 'world.identity.lastModified', w.identity.lastModified, 'date'),
           ],
         },
       ],
@@ -235,7 +265,7 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
     return {
       kicker: 'Location',
       title: l.name,
-      subtitle: l.id,
+      subtitle: l.description.slice(0, 80),
       hasImage: false,
       deletable: true,
       groups: [
@@ -260,7 +290,7 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
     return {
       kicker: 'Convention',
       title: r.statement.slice(0, 40) || 'Rule',
-      subtitle: r.id,
+      subtitle: r.canBreak ? 'Flexible — may bend if the story demands' : 'Firm',
       hasImage: false,
       deletable: true,
       groups: [
@@ -312,7 +342,13 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
         {
           heading: 'State',
           fields: [
-            F('Location', `${base}.state.location`, c.state.location),
+            // Pick from the world's defined locations by NAME, with an add-new
+            // escape hatch. Normalized through characterLocations() so a doc that
+            // still stores a single string edits as a one-item list.
+            F('Location', `${base}.state.location`, characterLocations(c.state), 'multi', {
+              noun: 'location',
+              options: w.setting.locations.map((l) => l.name).filter(Boolean),
+            }),
             F('Status', `${base}.state.status`, c.state.status),
             F('Emotional state', `${base}.state.emotionalState`, c.state.emotionalState),
             F('Knowledge', `${base}.state.knowledge`, c.state.knowledge, 'list', { sep: '\n' }),
@@ -337,23 +373,37 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
     if (i < 0) return null;
     const r = w.entities.relationships[i]!;
     const base = `world.entities.relationships[${i}]`;
-    const charOpts = w.entities.characters.map((c) => c.id);
+    // A relationship is a pair, so each side is a single choice. The dropdown
+    // shows character NAMES while still storing ids, so the panel never surfaces
+    // raw handles like `char_abc123`.
+    const charOpts = w.entities.characters.map((c) => ({ value: c.id, label: c.name || c.id }));
     return {
       kicker: 'Relationship',
       title: r.type || 'Relationship',
-      subtitle: r.id,
+      // Who this is actually between, by name — far more use than the raw id.
+      subtitle: r.between
+        .map((id) => w.entities.characters.find((c) => c.id === id)?.name)
+        .filter(Boolean)
+        .join(' & '),
       hasImage: false,
       deletable: true,
       groups: [
         {
           heading: 'Relationship',
           fields: [
-            F('Between A', `${base}.between[0]`, r.between[0], 'enum', { options: charOpts }),
-            F('Between B', `${base}.between[1]`, r.between[1], 'enum', { options: charOpts }),
+            F('Between A', `${base}.between[0]`, r.between[0], 'pick', {
+              noun: 'character',
+              choices: charOpts,
+            }),
+            F('Between B', `${base}.between[1]`, r.between[1], 'pick', {
+              noun: 'character',
+              choices: charOpts,
+            }),
             F('Type', `${base}.type`, r.type),
             F('Description', `${base}.description`, r.description, 'long'),
             F('Tension', `${base}.tension`, r.tension, 'long'),
-            F('History (event refs)', `${base}.history`, r.history, 'list'),
+            // Free-write prose, not a line-per-entry list.
+            F('History', `${base}.history`, r.history, 'proselist'),
           ],
         },
       ],
@@ -369,7 +419,8 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
     return {
       kicker: 'Concept',
       title: c.name,
-      subtitle: c.id,
+      // Internal ids are never surfaced — the author has no use for them.
+      subtitle: c.definition.slice(0, 80),
       hasImage: false,
       deletable: true,
       groups: [
@@ -379,8 +430,19 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
             F('Name', `${base}.name`, c.name),
             F('Definition', `${base}.definition`, c.definition, 'long'),
             F('Author position', `${base}.authorPosition`, c.authorPosition, 'long'),
-            F('Sources', `${base}.sources`, c.sources, 'list'),
-            F('Related concepts', `${base}.relatedConcepts`, c.relatedConcepts, 'list'),
+            // Pick from what the world already defines, or add a new entry inline.
+            F('Sources', `${base}.sources`, c.sources, 'multi', {
+              noun: 'source',
+              options: w.entities.sources.map((s) => s.citation).filter(Boolean),
+            }),
+            F('Related concepts', `${base}.relatedConcepts`, c.relatedConcepts, 'multi', {
+              noun: 'concept',
+              // Other CONCEPTS — never characters — and a concept is not its own relation.
+              options: w.entities.concepts
+                .filter((o) => o.id !== c.id)
+                .map((o) => o.name)
+                .filter(Boolean),
+            }),
           ],
         },
       ],
@@ -396,7 +458,7 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
     return {
       kicker: 'Source',
       title: s.citation.slice(0, 40) || 'Source',
-      subtitle: s.id,
+      subtitle: s.reliability,
       hasImage: false,
       deletable: true,
       groups: [
@@ -422,7 +484,7 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
     return {
       kicker: 'Chapter',
       title: c.title,
-      subtitle: c.id,
+      subtitle: c.summary.slice(0, 80),
       hasImage: false,
       deletable: true,
       groups: [
@@ -437,7 +499,6 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
             F('POV character', `${base}.povCharacter`, c.povCharacter),
             F('Purpose', `${base}.purpose`, c.purpose, 'long'),
             F('Summary', `${base}.summary`, c.summary, 'long'),
-            F('Scene IDs', `${base}.sceneIds`, c.sceneIds, 'list'),
             F('Word count', `${base}.wordCount`, c.wordCount, 'ro'),
           ],
         },
@@ -445,93 +506,21 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
     };
   }
 
-  // ── structure: scene ──
-  if (key.startsWith('scene:')) {
-    const i = w.structure.scenes.findIndex((s) => s.id === key.slice(6));
-    if (i < 0) return null;
-    const s = w.structure.scenes[i]!;
-    const base = `world.structure.scenes[${i}]`;
-    return {
-      kicker: 'Scene',
-      title: s.summary.slice(0, 40) || 'Scene',
-      subtitle: s.id,
-      hasImage: false,
-      deletable: true,
-      groups: [
-        {
-          heading: 'Scene',
-          fields: [
-            F('Chapter ID', `${base}.chapterId`, s.chapterId),
-            F('Location', `${base}.location`, s.location),
-            F('Characters present', `${base}.charactersPresent`, s.charactersPresent, 'list'),
-            F('Summary', `${base}.summary`, s.summary, 'long'),
-            F('Beats', `${base}.beats`, s.beats, 'list', { sep: '\n' }),
-            F('Timeline position', `${base}.timelinePosition`, s.timelinePosition),
-          ],
-        },
-      ],
-    };
-  }
+  // Scene and timeline nodes are legacy: a world doc may still hold `structure.scenes`
+  // / `structure.timeline`, but there is no tree entry and no detail view for them —
+  // the data is carried through untouched.
 
-  // ── structure: timeline (list editor) ──
-  if (key === 'timeline') {
-    return {
-      kicker: 'Structure',
-      title: 'Timeline',
-      subtitle: 'Story-world chronology (may differ from chapter order)',
-      hasImage: false,
-      groups: [
-        {
-          heading: 'Events',
-          addKind: 'timeline',
-          fields: w.structure.timeline.flatMap((t, i) => [
-            F(`When · ${t.id}`, `world.structure.timeline[${i}].when`, t.when),
-            F('Event', `world.structure.timeline[${i}].event`, t.event, 'long'),
-            F('Revealed in', `world.structure.timeline[${i}].revealedIn`, t.revealedIn),
-          ]),
-        },
-      ],
-    };
-  }
-
-  // ── memory: events ──
-  // One group per event so each can be edited AND deleted individually. The first
-  // group also carries the "+ Add" affordance for the list as a whole.
-  if (key === 'mem') {
-    const eventGroups: DetailGroup[] =
-      w.memory.events.length === 0
-        ? [{ heading: 'Events', addKind: 'event', fields: [] }]
-        : w.memory.events.map((e, i) => {
-            const base = `world.memory.events[${i}]`;
-            return {
-              heading: e.summary ? `Event · ${e.summary.slice(0, 40)}` : `Event · ${e.id}`,
-              addKind: i === 0 ? 'event' : undefined,
-              deleteKey: `event:${e.id}`,
-              fields: [
-                F('Summary', `${base}.summary`, e.summary),
-                F('Type', `${base}.type`, e.type, 'enum', {
-                  options: ['plot', 'character-development', 'worldbuilding', 'decision', 'retcon', 'research-finding'],
-                }),
-                F('Detail', `${base}.detail`, e.detail, 'long'),
-                F('Importance (1-5)', `${base}.importance`, e.importance, 'num'),
-                F('Entities', `${base}.entities`, e.entities, 'list'),
-                F('Chapter context', `${base}.chapterContext`, e.chapterContext),
-                F('Supersedes (retcon)', `${base}.supersedes`, e.supersedes ?? ''),
-              ],
-            };
-          });
-    return {
-      kicker: 'Memory',
-      title: 'Event log',
-      subtitle: 'What happened in the writing sessions — edit or delete individual events',
-      hasImage: false,
-      groups: eventGroups,
-    };
-  }
+  // The event log is legacy: it held chat-distillation output, and distillation
+  // was removed. `world.memory.events` is preserved on read/write for worlds that
+  // still carry entries (AI recipes may still summarize them), but there is no
+  // tree node and no detail view, so nothing routes here.
 
   // ── memory: canon ──
   // One group per fact so each can be edited AND deleted individually.
   if (key === 'canon') {
+    // "Established by" picks from the cast by NAME (the stored value stays a plain
+    // string[], so names typed before this was a picker still show and survive).
+    const castNames = w.entities.characters.map((c) => c.name).filter(Boolean);
     const factGroups: DetailGroup[] =
       w.memory.canon.length === 0
         ? [{ heading: 'Facts', addKind: 'canon', fields: [] }]
@@ -543,15 +532,20 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
               deleteKey: `canon:${c.id}`,
               fields: [
                 F('Fact', `${base}.fact`, c.fact, 'long'),
-                F('Established by', `${base}.establishedBy`, c.establishedBy, 'list'),
-                F('Immutable', `${base}.immutable`, c.immutable, 'bool'),
+                F('Established by', `${base}.establishedBy`, c.establishedBy, 'multi', {
+                  noun: 'character',
+                  options: castNames,
+                }),
+                // Stored flag is `immutable`; the checkbox states the negative, so
+                // ticking it makes the fact changeable (immutable: false).
+                F('Can be changed by another character', `${base}.immutable`, c.immutable, 'boolInv'),
               ],
             };
           });
     return {
       kicker: 'Memory',
       title: 'Canon facts',
-      subtitle: 'The compressed, immutable truth — edit or delete individual facts',
+      subtitle: 'The compressed truth of the world — edit or delete individual facts',
       hasImage: false,
       groups: factGroups,
     };

@@ -44,6 +44,44 @@ Where they conflict with older wording further down, THESE win.
    diff from the prior snapshot; a full snapshot is taken occasionally (every N /
    on demand / pre-migration). Restore = full + replay deltas. Keeps history
    cheap; invisible to the user; no data-model change.
+6. **Scenes and the timeline are retired from Structure.** `structure` is
+   chapters only. `structure.scenes[]`, `structure.timeline[]`, and
+   `chapters[].sceneIds[]` are **legacy**: the types and the JSON Schema still
+   accept them so world documents saved earlier keep loading, validating, and
+   round-tripping untouched — but nothing creates, lists, or edits them. No tree
+   entry, no detail view, no "+ Add", and `timeline` is out of the default
+   critique context recipe (a saved recipe that still names it keeps rendering,
+   so old sessions don't break).
+7. **No chat distillation.** Saving a chat persists the transcript and nothing
+   else. The durable state is already covered by the three explicit saves —
+   manuscript prose (debounced autosave), **Save World**, and **Save Chat** — so
+   a cheap-model pass deriving `memory.events` from transcripts was redundant,
+   and it made "Save Chat" silently write the world document. Memory events are
+   The `chats.distilled` column remains as a legacy always-false field so no
+   migration is needed.
+8. **The event log is retired from the UI.** `memory.events[]` existed to hold
+   distillation output; with distillation gone nothing populates it, so the
+   Memory section is Canon / Open threads / Decisions only — no "Event log" node,
+   no detail view, no **+ Event**. `recentEvents:high-importance` is out of the
+   default `discuss` recipe. All of it stays **legacy-tolerant**: the field is
+   preserved on read/write and the `recentEvents` renderer still works, so a
+   world saved earlier keeps its events and keeps feeding them to the AI if its
+   saved recipe names the item.
+9. **Chapter revision control.** Every prose write snapshots the PREVIOUS content
+   into `chapter_revisions` first, so history is complete and each row holds full
+   text (not a diff). The `reason` grades it:
+   - `autosave` — the 2.5s debounced typing checkpoint. Prunable.
+   - `manual` — an explicit **Save Draft**, and the auto-snapshot taken before a
+     restore. A deliberate draft point; **never pruned**.
+   - `pre_ai_edit` / `pre_ai_draft` — the text immediately before an AI-applied
+     change. Never pruned.
+
+   `PUT /api/chapters/:cid/content` accepts only `autosave` (default) or `manual`;
+   pre-AI reasons belong to the apply path alone. `POST /api/chapters/:cid/restore`
+   restores a revision, snapshotting the current text as `manual` first — **restore
+   never destroys work and is itself undoable** — and only accepts a revision
+   belonging to that chapter. History and restore are surfaced by the **History**
+   button in the Write view.
 
 ---
 
@@ -91,9 +129,10 @@ tables — ownership IS the namespace.
   UNIQUE(manuscript_id, chapter_id). This is the autosaving prose (TEXT).
 - `chapter_revisions`: id, chapter_id FK cascade (the chapters.id uuid),
   content, word_count, reason (autosave|pre_ai_edit|pre_ai_draft|manual),
-  created_at. Pre-AI + autosave revision history.
+  created_at. Full revision history — see Settled Decision 9.
 - `chats`: id, world_id FK cascade, title, mode, character_id (nullable),
-  messages (JSONB array), distilled (bool default false), saved_at
+  messages (JSONB array), saved_at. (`distilled` bool still exists as a legacy
+  column, always false — see Settled Decision 7; kept to avoid a migration.)
 
 **Provisioning:** plpgsql function `provision_user_schema(p_schema)` using
 `format(%I)` throughout, called inside the signup transaction. See
@@ -123,22 +162,27 @@ Top-level: `world` containing:
   significance, tags), rules[] (id, statement, implications, canBreak)
 - **entities:**
   - characters[]: id, name, role, definition{backstory, traits, voice,
-    knowledgeSkills, desires, wounds, contradiction}, state{location, status,
+    knowledgeSkills, desires, wounds, contradiction}, state{location[], status,
     emotionalState, knowledge[], inventory[]}, arc{startingPoint, trajectory,
-    endpoint}
-  - relationships[]: id, between[2], type, description, tension, history[memRefs]
+    endpoint}. `state.location` is a **list** (a character can be in more than one
+    place); a bare string is still accepted for documents written before that —
+    always read it via `characterLocations(state)`, never directly.
+  - relationships[]: id, between[2], type, description, tension, history[memRefs].
+    `between` stays a strict PAIR; the editor picks each side by character name
+    while storing ids.
   - factions[]: id, name, description, goals, members[], tags[]
   - concepts[]: id, name, definition, sources[], relatedConcepts[],
     authorPosition   (nonfiction backbone)
   - sources[]: id, citation, keyClaims[], notes, reliability
 - **structure:** chapters[] (id, order, title, status, summary, purpose,
-  povCharacter, sceneIds[], wordCount — content lives in manuscripts table,
-  NOT here), scenes[] (id, chapterId, location, charactersPresent[], summary,
-  beats[], timelinePosition), timeline[] (id, when, event, revealedIn)
-- **memory (three layers + decisions):**
-  - events[]: id, timestamp, type (plot|character-development|worldbuilding|
-    decision|retcon|research-finding), summary (one line), detail, entities[],
-    chapterContext, supersedes (retcon pointer — never delete), importance 1–5
+  povCharacter, wordCount — content lives in manuscripts table, NOT here).
+  Legacy, read-only-compatible (see Settled Decision 6): chapters[].sceneIds[],
+  scenes[], timeline[] — accepted on existing documents, never produced.
+- **memory (canon + threads + decisions):**
+  - events[]: **legacy, no UI** (see Settled Decision 8) — id, timestamp, type
+    (plot|character-development|worldbuilding|decision|retcon|research-finding),
+    summary (one line), detail, entities[], chapterContext, supersedes (retcon
+    pointer — never delete), importance 1–5. Preserved on read/write; not authored.
   - canon[]: id, fact, establishedBy[], immutable
   - openThreads[]: id, description, plantedIn, mustResolveBy, status
     (open|resolved|abandoned), resolvedIn
@@ -166,8 +210,7 @@ Top-level: `world` containing:
     draft: targetOutlineBeats, canon, adjacentChapterSummaries,
       characterDefinitions:present, styleNotes
     edit: targetTextFull, styleNotes, bannedWords, canon:minimal
-    critique: targetTextFull, canon, openThreads, timeline,
-      characterStates:present
+    critique: targetTextFull, canon, openThreads, characterStates:present
     discuss: premise, canonSummary, openThreads, recentEvents:high-importance
   - narratorVoice, hardRules[], styleNotes, linguisticFilters{bannedWords,
     bannedPhrases}
@@ -195,9 +238,8 @@ loudly on malformed documents.
   the character does not know things not in their knowledge array.
 - Suggestions from critique/edit come back as structured objects (the
   suggestions schema above), applied only on user acceptance.
-- Chat distillation: when a chat is saved, run a distillation pass (cheap
-  model) extracting memory events from the transcript, append to
-  world.memory.events, set chats.distilled = true. Restartable.
+- **No chat distillation** (see Settled Decision 7). Saving a chat persists the
+  transcript and nothing else — it never writes the world document.
 
 ---
 
@@ -251,7 +293,7 @@ loudly on malformed documents.
 5. Credentials: envelope encryption module, CRUD, provider adapters
 6. Context assembly engine + mode permission enforcement
 7. AI endpoints per mode, streaming responses, suggestion objects
-8. Chat save + distillation pass
+8. Chat save (transcript only — no distillation)
 9. Frontend wiring to the prototype
 10. Export (world.json + full data)
 

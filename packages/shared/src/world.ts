@@ -63,7 +63,15 @@ export interface CharacterDefinition {
 }
 
 export interface CharacterState {
-  location: string;
+  /**
+   * Where the character currently is. A list — a character can be in more than
+   * one place (a ship and its cabin, a city and a room).
+   *
+   * Accepts a bare `string` too: world documents written before this became a
+   * list still hold one. Read it through `characterLocations()` rather than
+   * touching it directly, so both shapes are handled in one place.
+   */
+  location: string[] | string;
   status: string;
   emotionalState: string;
   /** The character does NOT know things absent from this array (enforced in character chat). */
@@ -146,10 +154,16 @@ export interface ChapterMeta {
   summary: string;
   purpose: string;
   povCharacter: string;
-  sceneIds: string[];
+  /** @deprecated Legacy. Retained so older world docs keep round-tripping; no UI. */
+  sceneIds?: string[];
   wordCount: number;
 }
 
+/**
+ * @deprecated Legacy shape. Scenes were removed from the structure model — the
+ * type stays so existing world documents keep parsing, but nothing creates,
+ * reads, or edits scenes through the interface.
+ */
 export interface Scene {
   id: string;
   chapterId: string;
@@ -160,6 +174,10 @@ export interface Scene {
   timelinePosition: string;
 }
 
+/**
+ * @deprecated Legacy shape. The timeline was removed from the structure model —
+ * retained only so existing world documents keep parsing.
+ */
 export interface TimelineEntry {
   id: string;
   when: string;
@@ -169,8 +187,10 @@ export interface TimelineEntry {
 
 export interface WorldStructure {
   chapters: ChapterMeta[];
-  scenes: Scene[];
-  timeline: TimelineEntry[];
+  /** @deprecated Legacy — preserved on read/write, never surfaced in the UI. */
+  scenes?: Scene[];
+  /** @deprecated Legacy — preserved on read/write, never surfaced in the UI. */
+  timeline?: TimelineEntry[];
 }
 
 // ─── memory (three layers + decisions) ──────────────────────
@@ -267,4 +287,18 @@ export interface World {
 /** The top-level shape of `worlds.data` / a `world.json` file. */
 export interface WorldDocument {
   world: World;
+}
+
+/**
+ * Read `character.state.location` as a list, whichever shape it's stored in.
+ *
+ * It became a list so a character can be in several places at once; documents
+ * written before that hold a single string. Every reader goes through here so
+ * neither shape needs handling at the call site. Blank entries are dropped, so a
+ * legacy `location: ''` reads as `[]` rather than `['']`.
+ */
+export function characterLocations(state: Pick<CharacterState, 'location'>): string[] {
+  const raw = state.location;
+  const list = Array.isArray(raw) ? raw : [raw];
+  return list.filter((l): l is string => typeof l === 'string' && l.trim() !== '');
 }

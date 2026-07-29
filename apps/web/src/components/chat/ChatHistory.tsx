@@ -145,7 +145,6 @@ export function ChatHistory({
                   <div style={{ fontSize: 11.5, color: '#6d7473', marginTop: 3 }}>
                     {who ? `${who} · ` : ''}
                     {c.messages.length} message{c.messages.length === 1 ? '' : 's'}
-                    {c.distilled ? ' · distilled' : ''}
                   </div>
                 </button>
                 <button

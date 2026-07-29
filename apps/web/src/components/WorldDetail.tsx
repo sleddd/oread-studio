@@ -71,6 +71,21 @@ function FieldEditor({ f }: { f: EditableField }): JSX.Element {
       </div>
     );
   }
+  // Read-only ISO timestamp rendered in the viewer's locale ("28 July 2026 at
+  // 14:32"). The stored value stays the exact ISO string — this is display only.
+  if (f.kind === 'date') {
+    return (
+      <div
+        style={{
+          ...fieldBox,
+          color: '#c9cdcb',
+          border: '1px solid #1c2121',
+        }}
+      >
+        {formatTimestamp(f.value)}
+      </div>
+    );
+  }
   if (f.kind === 'long') {
     return (
       <textarea
@@ -86,6 +101,58 @@ function FieldEditor({ f }: { f: EditableField }): JSX.Element {
         <input type="checkbox" checked={!!f.value} onChange={(e) => set(e.target.checked)} />
         {f.value ? 'true' : 'false'}
       </label>
+    );
+  }
+  // Checkbox whose LABEL states the negative of the stored flag (canon
+  // "Can be changed by another character" over `immutable`): show !value, write
+  // !checked. Keeps the stored field and its AI semantics untouched.
+  if (f.kind === 'boolInv') {
+    const checked = !f.value;
+    return (
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#c9cdcb', fontSize: 14 }}>
+        <input type="checkbox" checked={checked} onChange={(e) => set(!e.target.checked)} />
+        {checked ? 'Yes — another character can change it' : 'No — this is fixed canon'}
+      </label>
+    );
+  }
+  if (f.kind === 'multi') {
+    const arr = Array.isArray(f.value) ? (f.value as string[]) : [];
+    return <MultiSelect value={arr} options={f.options ?? []} onChange={set} noun={f.noun} />;
+  }
+  // Single choice whose display label differs from the stored value — used for
+  // relationship members, which store a character id but must read as a name.
+  if (f.kind === 'pick') {
+    return <PickOne field={f} onChange={set} />;
+  }
+  /**
+   * Free prose over a field that happens to be stored as string[]. You write
+   * paragraphs; only BLANK lines separate entries, so pressing Enter inside a
+   * thought doesn't chop it into two list items. Round-trips: entries join back
+   * with a blank line between them.
+   */
+  if (f.kind === 'proselist') {
+    const arr = Array.isArray(f.value) ? (f.value as string[]) : [];
+    return (
+      <LineListEditor
+        value={arr}
+        onCommit={set}
+        join={(v) => v.join('\n\n')}
+        parse={parseParagraphs}
+        placeholder="Write freely — leave a blank line to start a new entry"
+      />
+    );
+  }
+  // string[] edited as ONE free textarea, one entry per line. Parses on blur so
+  // Enter and blank lines behave normally while typing.
+  if (f.kind === 'longlist') {
+    const arr = Array.isArray(f.value) ? (f.value as string[]) : [];
+    return (
+      <LineListEditor
+        value={arr}
+        onCommit={set}
+        parse={parseLines}
+        placeholder="Write freely — one entry per line"
+      />
     );
   }
   if (f.kind === 'num') {
@@ -173,25 +240,31 @@ function LineListEditor({
   onCommit,
   parse,
   placeholder,
+  join,
 }: {
   value: string[];
   onCommit: (v: string[]) => void;
   parse: (raw: string) => string[];
   placeholder: string;
+  /** how stored entries become editable text; defaults to one per line */
+  join?: (v: string[]) => string;
 }): JSX.Element {
-  const [draft, setDraft] = useState(value.join('\n'));
+  const toText = join ?? ((v: string[]) => v.join('\n'));
+  const [draft, setDraft] = useState(toText(value));
   const [focused, setFocused] = useState(false);
 
   // Re-seed from the store when the underlying list changes and we're not editing.
   useEffect(() => {
-    if (!focused) setDraft(value.join('\n'));
+    if (!focused) setDraft(toText(value));
+    // toText is derived from the `join` prop, which is stable per call site.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, focused]);
 
   const commit = () => {
     setFocused(false);
     const parsed = parse(draft);
     onCommit(parsed);
-    setDraft(parsed.join('\n')); // normalize what's shown to the cleaned entries
+    setDraft(toText(parsed)); // normalize what's shown to the cleaned entries
   };
 
   return (
@@ -204,6 +277,242 @@ function LineListEditor({
       style={{ ...fieldBox, minHeight: 96, resize: 'vertical' }}
     />
   );
+}
+
+/**
+ * Single choice whose display label differs from the stored value — relationship
+ * members store a character id but must read as a name.
+ *
+ * Choosing "+ Add a new character…" takes a name and MINTS A REAL CHARACTER, then
+ * selects it. That's required here rather than optional: the field stores an id,
+ * so a free-text name with nothing behind it would be a dangling reference.
+ */
+function PickOne({
+  field,
+  onChange,
+}: {
+  field: EditableField;
+  onChange: (v: string) => void;
+}): JSX.Element {
+  const store = useStore();
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  const choices = field.choices ?? [];
+  const current = String(field.value ?? '');
+  // A value with no matching choice (a since-deleted character) would otherwise
+  // show as blank and be silently overwritten on the next save — surface it.
+  const orphan = current && !choices.some((c) => c.value === current);
+
+  const commitNew = () => {
+    const id = store.addCharacterNamed(draft);
+    setDraft('');
+    setAdding(false);
+    if (id) onChange(id);
+  };
+
+  if (adding) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commitNew}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commitNew();
+          } else if (e.key === 'Escape') {
+            setDraft('');
+            setAdding(false);
+          }
+        }}
+        placeholder={`New ${field.noun ?? 'entry'} name, then Enter`}
+        style={fieldBox}
+      />
+    );
+  }
+
+  return (
+    <select
+      value={current}
+      onChange={(e) => {
+        const v = e.target.value;
+        if (v === '__new__') setAdding(true);
+        else onChange(v);
+      }}
+      style={fieldBox}
+    >
+      <option value="">(nobody selected)</option>
+      {choices.map((c) => (
+        <option key={c.value} value={c.value}>
+          {c.label}
+        </option>
+      ))}
+      {orphan && <option value={current}>(unknown — {current})</option>}
+      <option value="__new__">+ Add a new {field.noun ?? 'entry'}…</option>
+    </select>
+  );
+}
+
+/**
+ * Multi-select over a known option list that still accepts entries outside it.
+ * Selections are chips you can remove; the dropdown offers the remaining options
+ * plus an "+ Add …" escape hatch that takes a free-text entry. Values outside
+ * `options` (typed before this was a picker, or added here) render as chips just
+ * the same, so nothing already stored is lost.
+ *
+ * `noun` names what is being picked ("character", "concept", "source"), so the
+ * prompts read correctly wherever this is used — the list is not always people.
+ */
+function MultiSelect({
+  value,
+  options,
+  onChange,
+  noun = 'entry',
+}: {
+  value: string[];
+  options: string[];
+  onChange: (v: string[]) => void;
+  noun?: string;
+}): JSX.Element {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  const add = (name: string) => {
+    const n = name.trim();
+    // Case-insensitive dedupe so "Sam" and "sam" don't both land in the list.
+    if (!n || value.some((v) => v.toLowerCase() === n.toLowerCase())) return;
+    onChange([...value, n]);
+  };
+  const remove = (name: string) => onChange(value.filter((v) => v !== name));
+
+  const remaining = options.filter(
+    (o) => !value.some((v) => v.toLowerCase() === o.toLowerCase()),
+  );
+
+  const commitNew = () => {
+    add(draft);
+    setDraft('');
+    setAdding(false);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {value.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {value.map((v) => (
+            <span
+              key={v}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 13.5,
+                color: '#e0e3e1',
+                background: 'rgba(46,157,157,0.14)',
+                border: '1px solid #232929',
+                borderRadius: 999,
+                padding: '4px 6px 4px 11px',
+              }}
+            >
+              {v}
+              <button
+                type="button"
+                onClick={() => remove(v)}
+                aria-label={`Remove ${v}`}
+                title={`Remove ${v}`}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#9aa3a1',
+                  cursor: 'pointer',
+                  fontSize: 15,
+                  lineHeight: 1,
+                  padding: '0 4px',
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {adding ? (
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitNew}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              commitNew();
+            } else if (e.key === 'Escape') {
+              setDraft('');
+              setAdding(false);
+            }
+          }}
+          placeholder={`New ${noun}, then Enter`}
+          style={fieldBox}
+        />
+      ) : (
+        <select
+          value=""
+          onChange={(e) => {
+            const v = e.target.value;
+            if (!v) return;
+            if (v === '__new__') setAdding(true);
+            else add(v);
+          }}
+          style={fieldBox}
+        >
+          <option value="">
+            {value.length ? 'Add another…' : `Select a ${noun}…`}
+          </option>
+          {remaining.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+          <option value="__new__">+ Add a new {noun}…</option>
+        </select>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Human-readable form of a stored ISO timestamp, in the viewer's own locale and
+ * timezone — e.g. "28 July 2026 at 14:32" / "July 28, 2026 at 2:32 PM".
+ *
+ * Falls back to the raw text if the value isn't a parseable date, so a hand-edited
+ * or legacy world document shows what it actually holds rather than "Invalid Date".
+ */
+function formatTimestamp(v: unknown): string {
+  const raw = asText(v);
+  if (!raw.trim()) return '—';
+  const t = Date.parse(raw);
+  if (Number.isNaN(t)) return raw;
+  return new Date(t).toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * Split free prose into entries on BLANK lines, so a single newline stays inside
+ * the paragraph you're writing. Each entry keeps its internal line breaks.
+ */
+function parseParagraphs(raw: string): string[] {
+  return raw
+    .split(/\n\s*\n/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 }
 
 /** Split a one-per-line block: trim each line, drop blanks. Used on blur. */

@@ -4,7 +4,12 @@
  * load and save.
  */
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import type { WorldDocument, WritingFormat, ChapterStatusDb } from '@oread/shared';
+import type {
+  WorldDocument,
+  WritingFormat,
+  ChapterStatusDb,
+  RevisionReason,
+} from '@oread/shared';
 import { getStore } from '../storage/index.js';
 import { emptyWorld } from '../world/factory.js';
 import { validateWorld, WorldValidationError } from '../world/validate.js';
@@ -215,12 +220,44 @@ export async function worldRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ chapter: ch });
   });
 
-  // Autosave / manual save of chapter prose.
-  app.put<{ Params: { cid: string }; Body: { content: string } }>(
+  // Autosave / manual save of chapter prose. `reason` marks WHY the revision was
+  // taken: 'autosave' is the debounced typing checkpoint (prunable), 'manual' is
+  // an explicit Save Draft the author asked for (never pruned). Only those two are
+  // accepted here — pre_ai_* reasons belong to the AI apply path.
+  app.put<{ Params: { cid: string }; Body: { content: string; reason?: RevisionReason } }>(
     '/api/chapters/:cid/content',
     async (req, reply) => {
       if (!auth(req, reply)) return;
-      const ch = await store.saveChapterContent(ctxOf(req), req.params.cid, req.body?.content ?? '', 'autosave');
+      const reason: RevisionReason = req.body?.reason === 'manual' ? 'manual' : 'autosave';
+      const ch = await store.saveChapterContent(ctxOf(req), req.params.cid, req.body?.content ?? '', reason);
+      return reply.send({ chapter: ch });
+    },
+  );
+
+  /**
+   * Restore a chapter to an earlier revision. The CURRENT content is snapshotted
+   * as a 'manual' revision first, so restoring is itself undoable and never
+   * destroys work. The revision must belong to the chapter being restored.
+   */
+  app.post<{ Params: { cid: string }; Body: { revisionId: string } }>(
+    '/api/chapters/:cid/restore',
+    async (req, reply) => {
+      if (!auth(req, reply)) return;
+      const revisionId = req.body?.revisionId;
+      if (!revisionId) return reply.code(400).send({ error: 'revisionId required' });
+
+      const revisions = await store.listChapterRevisions(ctxOf(req), req.params.cid);
+      const target = revisions.find((r) => r.id === revisionId);
+      // Scoping the lookup to this chapter's own revisions means a revision id
+      // from another chapter can't be used to inject content across chapters.
+      if (!target) return reply.code(404).send({ error: 'revision not found for this chapter' });
+
+      const ch = await store.saveChapterContent(
+        ctxOf(req),
+        req.params.cid,
+        target.content,
+        'manual',
+      );
       return reply.send({ chapter: ch });
     },
   );
