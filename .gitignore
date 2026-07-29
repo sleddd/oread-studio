@@ -8,3 +8,8 @@ build/
 data/worlds/
 coverage/
 *.tsbuildinfo
+
+# Claude Code settings are machine-specific (scratchpad paths, local ports,
+# one-off tool allowances), so they are not shared.
+.claude/settings.json
+.claude/settings.local.json
