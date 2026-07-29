@@ -32,12 +32,16 @@ export interface GenerateParams {
   world: WorldDocument;
   mode: PersistedChatMode;
   characterId: string | null;
+  /** who the author is speaking AS in character chat (character id, or null = the author) */
+  userAs?: string | null;
   messages: ChatTurn[];
   targetChapterId: string;
   targetChapterText?: string;
   /** the prose row's chapter_id → world.structure.chapters[].id, for outline meta */
   targetChapterMetaId?: string;
   recentScenes?: string[];
+  /** the chapters immediately before the target, as real prose (oldest first) */
+  precedingChapters?: { title: string; text: string }[];
   /** user asked the model to research the web this turn (gated by mode contract) */
   allowWebSearch?: boolean;
   /** streaming sink; if omitted, non-streaming */
@@ -151,9 +155,11 @@ export async function generate(params: GenerateParams): Promise<GenerateOutput> 
     world,
     mode,
     characterId: params.characterId,
+    userAs: params.userAs ?? null,
     targetChapterText: params.targetChapterText,
     targetChapterMetaId: params.targetChapterMetaId,
     recentScenes: params.recentScenes,
+    precedingChapters: params.precedingChapters,
   });
 
   // Web search is only offered to modes whose contract permits research, and

@@ -11,6 +11,13 @@ import { generate } from '../ai/orchestrator.js';
 import { assertApplyAllowed, baseMode, ModePermissionError } from '../ai/permissions.js';
 import type { ChatTurn } from '../ai/provider.js';
 
+/**
+ * How many preceding chapters of real prose to hand the model. Three is enough
+ * to carry voice, momentum and immediate continuity without swamping the token
+ * budget — the context assembler trims from the front if it still doesn't fit.
+ */
+const PRECEDING_CHAPTERS = 3;
+
 function ctxOf(req: FastifyRequest) {
   return { schemaName: req.auth!.user.schemaName };
 }
@@ -26,6 +33,8 @@ interface GenerateBody {
   worldId: string;
   mode: PersistedChatMode;
   characterId: string | null;
+  /** who the author is speaking AS in character chat (character id, or null = the author) */
+  userAs?: string | null;
   messages: ChatTurn[];
   targetChapterId: string; // the chapter row uuid
   /** user opted into web research for this turn (gated server-side by mode) */
@@ -56,10 +65,26 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
     // context builder pull the chapter's outline metadata (title/summary/purpose).
     let targetText: string | undefined;
     let targetChapterMetaId: string | undefined;
+    let precedingChapters: { title: string; text: string }[] | undefined;
     if (body.targetChapterId) {
       const ch = await store.getChapter(ctxOf(req), body.targetChapterId);
       targetText = ch?.content;
       targetChapterMetaId = ch?.chapter_id;
+
+      // The chapters immediately BEFORE this one, as actual prose. Draft and
+      // co-write need to continue from what was really written — chapter
+      // summaries are author metadata and often stale or absent, so on their own
+      // they let the model contradict the text it is continuing.
+      if (ch) {
+        const siblings = await store.listChapters(ctxOf(req), ch.manuscript_id);
+        const titleOf = (row: { chapter_id: string }): string =>
+          world.world.structure.chapters.find((m) => m.id === row.chapter_id)?.title ?? 'Untitled';
+        precedingChapters = siblings
+          .filter((c) => c.order < ch.order && c.content.trim())
+          .sort((a, b) => a.order - b.order)
+          .slice(-PRECEDING_CHAPTERS)
+          .map((c) => ({ title: titleOf(c), text: c.content }));
+      }
     }
 
     reply.raw.writeHead(200, {
@@ -77,10 +102,12 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
         world,
         mode: body.mode,
         characterId: body.characterId,
+        userAs: body.userAs ?? null,
         messages: body.messages,
         targetChapterId: body.targetChapterId,
         targetChapterText: targetText,
         targetChapterMetaId,
+        precedingChapters,
         allowWebSearch: body.allowWebSearch,
         onDelta: (t) => sse('delta', { text: t }),
       });

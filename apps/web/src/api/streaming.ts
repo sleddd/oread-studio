@@ -8,6 +8,8 @@ export interface GenerateRequest {
   worldId: string;
   mode: PersistedChatMode;
   characterId: string | null;
+  /** who the AUTHOR speaks as in character chat: a character id, or 'author' */
+  userAs?: string;
   messages: { role: 'user' | 'assistant'; content: string }[];
   targetChapterId: string;
   /** research the web this turn (server gates it by mode) */

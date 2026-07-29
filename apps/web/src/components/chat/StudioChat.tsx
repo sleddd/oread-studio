@@ -3,6 +3,7 @@ import { useStore } from '../../state/store.js';
 import { MODES, CFG_DEFS, modeAction, composerPlaceholder } from '../../state/modes.js';
 import { MessageItem } from './Message.js';
 import { ChatHistory } from './ChatHistory.js';
+import { NARRATOR } from '../../state/cast.js';
 
 export function StudioChat({ onCollapse }: { onCollapse: () => void }): JSX.Element {
   const store = useStore();
@@ -156,6 +157,38 @@ export function StudioChat({ onCollapse }: { onCollapse: () => void }): JSX.Elem
             <div style={{ fontSize: 12, color: '#6d7473' }}>{activeChar.role}</div>
           </div>
         </div>
+
+        {/* Who the AUTHOR is speaking as. Only meaningful when the AI is playing a
+            character — talking to the Narrator, you are always yourself. */}
+        {store.character !== NARRATOR.id && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+            <span style={{ fontSize: 11.5, color: '#6d7473', flex: '0 0 auto' }}>You are</span>
+            <select
+              value={store.userAs}
+              onChange={(e) => store.setUserAs(e.target.value)}
+              style={{
+                flex: '1 1 auto',
+                minWidth: 0,
+                background: '#16191a',
+                border: '1px solid #262b2b',
+                borderRadius: 8,
+                color: '#e9ecea',
+                fontSize: 12.5,
+                fontWeight: 600,
+                padding: '5px 9px',
+              }}
+            >
+              <option value="author">the writer (yourself)</option>
+              {store.cast
+                .filter((c) => c.id !== NARRATOR.id && c.id !== store.character)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* mode pills + config */}

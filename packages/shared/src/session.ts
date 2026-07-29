@@ -119,12 +119,17 @@ export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
 // droppable context and appears here.
 export const DEFAULT_CONTEXT_RECIPES: ContextRecipes = {
   cowrite: [
+    // Co-write continues the scene in front of the author, so the real text of
+    // the chapters leading up to it matters most. ('recentScenesVerbatim' was
+    // here, but nothing ever populated it — it always rendered nothing.)
     'premise',
-    'recentScenesVerbatim:2',
+    'precedingChapters:12',
     'characterStates:present',
     'openThreads',
     'canon',
     'worldRules',
+    'characterDefinitions:present',
+    'worldSetting',
     'styleNotes',
   ],
   draft: [
@@ -134,10 +139,15 @@ export const DEFAULT_CONTEXT_RECIPES: ContextRecipes = {
     'premise',
     'targetChapterMeta',
     'targetOutlineBeats',
+    // The REAL prose of the chapters just before this one. High priority: the
+    // model has to continue actual writing, not a summary of it. Summaries alone
+    // let it contradict the text it is picking up from.
+    'precedingChapters:12',
     'canon',
     'worldRules',
-    'adjacentChapterSummaries',
     'characterDefinitions:present',
+    'worldSetting',
+    'adjacentChapterSummaries',
     'styleNotes',
   ],
   edit: ['targetTextFull', 'styleNotes', 'canon:minimal'],

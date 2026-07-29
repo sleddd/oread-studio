@@ -89,6 +89,8 @@ interface StoreState {
   credentialsList: CredentialMeta[];
   // chat client-state (unsaved until Save Chat)
   character: string;
+  /** who the AUTHOR speaks as in character chat: a character id, or 'author' */
+  userAs: string;
   mode: ChatMode;
   cfg: ModeCfg;
   msgs: ChatMessage[];
@@ -158,6 +160,7 @@ export interface StoreApi extends StoreState {
   setProseTypeface: (t: ProseTypeface) => void;
   // chat
   setCharacter: (id: string) => void;
+  setUserAs: (id: string) => void;
   setMode: (m: ChatMode) => void;
   setCfg: (mode: ChatMode, key: string, value: string) => void;
   setResearch: (on: boolean) => void;
@@ -207,6 +210,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     proseTypeface: 'Serif',
     credentialsList: [],
     character: 'narrator',
+    userAs: 'author',
     mode: 'cowrite',
     research: false,
     cfg: DEFAULT_CFG,
@@ -522,16 +526,27 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
 
   const newChapter = useCallback(async () => {
     if (!s.manuscriptId) return;
-    const chapterId = `ch_${nextId()}`;
-    // Works whether attached (worldId) or unattached (null) — chapter follows its manuscript.
-    const { chapter } = await apiWorlds.chapters.createInManuscript(s.manuscriptId, {
-      chapterId,
-      status: 'outline',
-    });
-    const { chapters: chs } = await apiWorlds.chapters.list(s.manuscriptId);
-    patch({ chaptersList: chs, chapterRowId: chapter.id, view: 'write', selectedNode: null });
-    showToast('Chapter added');
-  }, [s.manuscriptId, patch, showToast]);
+    // NOT the in-memory `nextId` counter: it restarts at the same number on every
+    // page load, so after a reload it proposes chapter ids that already exist and
+    // the UNIQUE (manuscript_id, chapter_id) constraint rejects the insert. A
+    // timestamp+random id cannot collide across sessions. (The server also
+    // resolves collisions, so old clients keep working.)
+    const chapterId = `ch_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    try {
+      // Works whether attached (worldId) or unattached (null) — chapter follows its manuscript.
+      const { chapter } = await apiWorlds.chapters.createInManuscript(s.manuscriptId, {
+        chapterId,
+        status: 'outline',
+      });
+      const { chapters: chs } = await apiWorlds.chapters.list(s.manuscriptId);
+      patch({ chaptersList: chs, chapterRowId: chapter.id, view: 'write', selectedNode: null });
+      showToast('Chapter added');
+    } catch (e) {
+      // Previously this rejected unhandled — the console showed a stack trace and
+      // the interface simply did nothing.
+      showError(e instanceof Error ? e.message : 'Could not add a chapter');
+    }
+  }, [s.manuscriptId, patch, showToast, showError]);
 
   const renameChapter = useCallback(
     async (cid: string, title: string) => {
@@ -709,6 +724,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
             worldId: s.worldId,
             mode,
             characterId: s.character === NARRATOR.id ? null : s.character,
+            userAs: s.userAs,
             messages: history,
             targetChapterId: s.chapterRowId ?? '',
             allowWebSearch: s.research && MODE_ALLOWS_RESEARCH(s.mode),
@@ -999,6 +1015,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     setAccent,
     setProseTypeface: (t) => patch({ proseTypeface: t }),
     setCharacter: (id) => patch({ character: id }),
+    setUserAs: (id) => patch({ userAs: id }),
     setMode: (m) => patch({ mode: m }),
     setCfg: (mode, key, val) =>
       setS((prev) => ({ ...prev, cfg: { ...prev.cfg, [mode]: { ...prev.cfg[mode], [key]: val } } })),
