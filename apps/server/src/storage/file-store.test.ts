@@ -253,3 +253,33 @@ test('saveChat with a stale chatId inserts a fresh row', async () => {
   const list = await store.listChats(ctx, wid);
   assert.equal(list.length, 1);
 });
+
+test('a duplicate chapter_id is resolved, not allowed to collide', async () => {
+  // The client's id generator is an in-memory counter that restarts at the same
+  // number every page load, so after a reload it proposes ids that already exist.
+  // Postgres enforces UNIQUE (manuscript_id, chapter_id) and was returning a 500;
+  // both backends now resolve the collision instead.
+  const wid = await store.createWorld(ctx, 'W', minimalWorld('W'));
+  const ms = await store.createManuscript(ctx, wid, {});
+  const first = await store.createChapter(ctx, wid, ms.id, { chapterId: 'ch_1001' });
+  assert.equal(first.chapter_id, 'ch_1001');
+
+  const second = await store.createChapter(ctx, wid, ms.id, { chapterId: 'ch_1001' });
+  assert.notEqual(second.chapter_id, 'ch_1001', 'the duplicate is renamed');
+  assert.equal(second.chapter_id, 'ch_1001_2');
+  assert.notEqual(second.id, first.id, 'a genuinely new row');
+
+  const third = await store.createChapter(ctx, wid, ms.id, { chapterId: 'ch_1001' });
+  assert.equal(third.chapter_id, 'ch_1001_3', 'keeps counting past the first collision');
+
+  const all = await store.listChapters(ctx, ms.id);
+  assert.equal(new Set(all.map((c) => c.chapter_id)).size, 3, 'all ids distinct');
+});
+
+test('createChapterInManuscript resolves duplicates too', async () => {
+  const wid = await store.createWorld(ctx, 'W', minimalWorld('W'));
+  const ms = await store.createManuscript(ctx, wid, {});
+  await store.createChapterInManuscript(ctx, ms.id, { chapterId: 'ch_1001' });
+  const dup = await store.createChapterInManuscript(ctx, ms.id, { chapterId: 'ch_1001' });
+  assert.equal(dup.chapter_id, 'ch_1001_2');
+});

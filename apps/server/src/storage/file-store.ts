@@ -54,6 +54,20 @@ const SNAPSHOT_FULL_EVERY = 10;
 const UNATTACHED = '__unattached__';
 const nowIso = () => new Date().toISOString();
 
+/**
+ * A chapter_id free within this manuscript. Mirrors the Postgres backend, which
+ * enforces UNIQUE (manuscript_id, chapter_id) — the client's proposed id can
+ * collide because its generator resets per page load.
+ */
+function freeChapterId(siblings: { chapter_id: string }[], proposed: string): string {
+  const used = new Set(siblings.map((c) => c.chapter_id));
+  if (!used.has(proposed)) return proposed;
+  for (let i = 2; ; i++) {
+    const candidate = `${proposed}_${i}`;
+    if (!used.has(candidate)) return candidate;
+  }
+}
+
 export class FileStore implements WorldStore {
   #root: string;
 
@@ -325,7 +339,9 @@ export class FileStore implements WorldStore {
       id: randomUUID(),
       world_id: worldId,
       manuscript_id: manuscriptId,
-      chapter_id: input.chapterId,
+      // Match Postgres, which enforces UNIQUE (manuscript_id, chapter_id): a
+      // duplicate would otherwise silently break the world↔prose mapping here.
+      chapter_id: freeChapterId(siblings, input.chapterId),
       content,
       word_count: countWords(content),
       status: input.status ?? 'outline',
@@ -354,7 +370,9 @@ export class FileStore implements WorldStore {
       id: randomUUID(),
       world_id: ms.world_id, // inherits (null when unattached)
       manuscript_id: manuscriptId,
-      chapter_id: input.chapterId,
+      // Match Postgres, which enforces UNIQUE (manuscript_id, chapter_id): a
+      // duplicate would otherwise silently break the world↔prose mapping here.
+      chapter_id: freeChapterId(siblings, input.chapterId),
       content,
       word_count: countWords(content),
       status: input.status ?? 'outline',

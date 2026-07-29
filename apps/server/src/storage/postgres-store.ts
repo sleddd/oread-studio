@@ -31,6 +31,31 @@ import type { RevisionReason, SnapshotReason } from '@oread/shared';
 /** Take a full snapshot every SNAPSHOT_FULL_EVERY snapshots. */
 const SNAPSHOT_FULL_EVERY = 10;
 
+/**
+ * A chapter_id that is free within this manuscript.
+ *
+ * `chapters` has UNIQUE (manuscript_id, chapter_id), and the client can only
+ * GUESS a free id — its generator is an in-memory counter that restarts at the
+ * same number on every page load, so after a reload it proposes ids that already
+ * exist. Resolving it here, where the taken ids are actually known, turns a
+ * constraint violation (an opaque 500) into a working "New Chapter".
+ */
+async function freeChapterId(
+  c: { query: (sql: string, params: unknown[]) => Promise<{ rows: { chapter_id: string }[] }> },
+  manuscriptId: string,
+  proposed: string,
+): Promise<string> {
+  const { rows } = await c.query('SELECT chapter_id FROM chapters WHERE manuscript_id = $1', [
+    manuscriptId,
+  ]);
+  const used = new Set(rows.map((r) => r.chapter_id));
+  if (!used.has(proposed)) return proposed;
+  for (let i = 2; ; i++) {
+    const candidate = `${proposed}_${i}`;
+    if (!used.has(candidate)) return candidate;
+  }
+}
+
 export class PostgresStore implements WorldStore {
   async listWorlds(ctx: StoreCtx): Promise<WorldSummary[]> {
     return withUserSchema(ctx.schemaName, async (c) => {
@@ -304,14 +329,17 @@ export class PostgresStore implements WorldStore {
   ): Promise<ChapterRow> {
     return withUserSchema(ctx.schemaName, async (c) => {
       const content = input.content ?? '';
+      const chapterId = await freeChapterId(c, manuscriptId, input.chapterId);
       const { rows } = await c.query<ChapterRow>(
         `INSERT INTO chapters (world_id, manuscript_id, chapter_id, content, word_count, status, "order")
          VALUES ($1, $2, $3, $4, $5, $6,
            COALESCE((SELECT max("order") + 1 FROM chapters WHERE manuscript_id = $2), 0))
          RETURNING *`,
-        [worldId, manuscriptId, input.chapterId, content, countWords(content), input.status ?? 'outline'],
+        [worldId, manuscriptId, chapterId, content, countWords(content), input.status ?? 'outline'],
       );
-      return rows[0]!;
+      const row = rows[0];
+      if (!row) throw new Error(`could not create chapter in manuscript ${manuscriptId}`);
+      return row;
     });
   }
 
@@ -322,15 +350,20 @@ export class PostgresStore implements WorldStore {
   ): Promise<ChapterRow> {
     return withUserSchema(ctx.schemaName, async (c) => {
       const content = input.content ?? '';
+      const chapterId = await freeChapterId(c, manuscriptId, input.chapterId);
       const { rows } = await c.query<ChapterRow>(
         `INSERT INTO chapters (world_id, manuscript_id, chapter_id, content, word_count, status, "order")
          SELECT m.world_id, m.id, $2, $3, $4, $5,
            COALESCE((SELECT max("order") + 1 FROM chapters WHERE manuscript_id = m.id), 0)
          FROM manuscripts m WHERE m.id = $1
          RETURNING *`,
-        [manuscriptId, input.chapterId, content, countWords(content), input.status ?? 'outline'],
+        [manuscriptId, chapterId, content, countWords(content), input.status ?? 'outline'],
       );
-      return rows[0]!;
+      // No row means the manuscript doesn't exist — say so instead of returning
+      // undefined and failing further down as a 500.
+      const row = rows[0];
+      if (!row) throw new Error(`manuscript ${manuscriptId} not found`);
+      return row;
     });
   }
 
