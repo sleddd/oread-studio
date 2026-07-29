@@ -100,6 +100,8 @@ interface StoreState {
   /** research the web on the next turn (Discuss/Draft only) */
   research: boolean;
   toast: string | null;
+  /** true when the toast is an error that must be dismissed by hand */
+  toastSticky: boolean;
 }
 
 export interface StoreApi extends StoreState {
@@ -174,6 +176,8 @@ export interface StoreApi extends StoreState {
   refreshSavedChats: () => Promise<void>;
   // toast
   showToast: (t: string) => void;
+  showError: (t: string) => void;
+  dismissToast: () => void;
 }
 
 const Ctx = createContext<StoreApi | null>(null);
@@ -211,14 +215,41 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     savedChats: [],
     thinking: false,
     toast: null,
+    toastSticky: false,
   });
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const patch = useCallback((p: Partial<StoreState>) => setS((prev) => ({ ...prev, ...p })), []);
 
   const showToast = useCallback((t: string) => {
-    patch({ toast: t });
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => patch({ toast: null }), 2200);
+    setS((prev) => {
+      // Never let a routine status message ("Draft saved", a retry notice) bury
+      // an error the author hasn't dismissed yet.
+      if (prev.toastSticky) return prev;
+      return { ...prev, toast: t, toastSticky: false };
+    });
+    toastTimer.current = setTimeout(
+      // Only clear if a sticky error hasn't taken over in the meantime.
+      () => setS((prev) => (prev.toastSticky ? prev : { ...prev, toast: null })),
+      2200,
+    );
+  }, []);
+
+  /**
+   * An error that STAYS until dismissed. Failures carry information the author
+   * needs to act on — which model was refused, what AWS wants enabling — and a
+   * 2.2s toast is gone before that can be read, let alone copied.
+   */
+  const showError = useCallback((t: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = null;
+    patch({ toast: t, toastSticky: true });
+  }, [patch]);
+
+  const dismissToast = useCallback(() => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = null;
+    patch({ toast: null, toastSticky: false });
   }, [patch]);
 
   const autosave = useAutosave(undefined, () => showToast('Reconnecting… changes will retry'));
@@ -701,10 +732,12 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
         setS((prev) => ({ ...prev, msgs: [...prev.msgs, assistant], thinking: false }));
       } catch (e) {
         setS((prev) => ({ ...prev, thinking: false }));
-        showToast(e instanceof Error ? e.message : 'generation failed');
+        // Sticky: provider failures explain what to fix (model access, region,
+        // an unsupported model) and are useless if they vanish after 2 seconds.
+        showError(e instanceof Error ? e.message : 'generation failed');
       }
     },
-    [s.worldId, s.mode, s.character, s.msgs, s.chapterRowId, s.research, showToast],
+    [s.worldId, s.mode, s.character, s.msgs, s.chapterRowId, s.research, showError],
   );
 
   const insertProse = useCallback(
@@ -739,17 +772,22 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
               reason: 'pre_ai_edit',
             }),
           });
-          if (res.ok) {
-            const body = await res.json();
-            setS((prev) => ({
-              ...prev,
-              chaptersList: prev.chaptersList.map((c) =>
-                c.id === prev.chapterRowId ? body.chapter : c,
-              ),
-            }));
+          if (!res.ok) {
+            const body = (await res.json().catch(() => ({}))) as { error?: string };
+            throw new Error(body.error ?? `Apply failed (${res.status})`);
           }
-        } catch {
-          /* toast below */
+          const body = await res.json();
+          setS((prev) => ({
+            ...prev,
+            chaptersList: prev.chaptersList.map((c) =>
+              c.id === prev.chapterRowId ? body.chapter : c,
+            ),
+          }));
+        } catch (e) {
+          // Don't mark the suggestion accepted or claim success — the manuscript
+          // was NOT changed. Sticky so the reason survives long enough to act on.
+          showError(e instanceof Error ? e.message : 'Could not apply to the manuscript');
+          return;
         }
       }
       setS((prev) => ({
@@ -758,7 +796,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
       }));
       showToast(apply ? 'Applied to the manuscript' : 'Suggestion accepted');
     },
-    [s.msgs, s.chapterRowId, showToast],
+    [s.msgs, s.chapterRowId, showToast, showError],
   );
 
   const rejectSuggestion = useCallback(
@@ -975,6 +1013,8 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     deleteChat,
     refreshSavedChats,
     showToast,
+    showError,
+    dismissToast,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
