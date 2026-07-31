@@ -12,11 +12,15 @@ import { assertApplyAllowed, baseMode, ModePermissionError } from '../ai/permiss
 import type { ChatTurn } from '../ai/provider.js';
 
 /**
- * How many preceding chapters of real prose to hand the model. Three is enough
- * to carry voice, momentum and immediate continuity without swamping the token
- * budget — the context assembler trims from the front if it still doesn't fit.
+ * How many preceding chapters of real prose to fetch for the model.
+ *
+ * This is a FETCH ceiling, not the context policy: the assembler's
+ * `precedingChapters:N` recipe item caps the characters actually sent and trims
+ * each chapter from the front, and the token budget drops what still won't fit.
+ * Three was sized for the old flat 6000-token budget; with the budget now
+ * derived from the model, the limiter should be the budget, not this number.
  */
-const PRECEDING_CHAPTERS = 3;
+const PRECEDING_CHAPTERS = 12;
 
 function ctxOf(req: FastifyRequest) {
   return { schemaName: req.auth!.user.schemaName };

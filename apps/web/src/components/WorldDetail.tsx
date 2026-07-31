@@ -165,6 +165,23 @@ function FieldEditor({ f }: { f: EditableField }): JSX.Element {
       />
     );
   }
+  if (f.kind === 'numOrAuto') {
+    // Blank is meaningful here: it means "derive this automatically", which is
+    // NOT the same as 0. So commit null on an empty field rather than Number('').
+    return (
+      <input
+        type="number"
+        value={f.value == null ? '' : Number(f.value)}
+        placeholder="Auto"
+        onChange={(e) => {
+          const raw = e.target.value.trim();
+          const n = Number(raw);
+          set(raw === '' || !Number.isFinite(n) || n <= 0 ? null : n);
+        }}
+        style={fieldBox}
+      />
+    );
+  }
   if (f.kind === 'enum') {
     return (
       <select value={String(f.value ?? '')} onChange={(e) => set(e.target.value || null)} style={fieldBox}>

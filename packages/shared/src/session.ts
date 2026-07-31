@@ -54,6 +54,14 @@ export interface ModelSettings {
   provider: 'anthropic' | 'openai' | 'bedrock' | 'cloudflare' | 'local' | null;
   model: string | null;
   temperature: number;
+  /**
+   * Author override for how many tokens of world context to send, in tokens.
+   * `null` (the default) derives it from the selected model — see the server's
+   * `contextBudgetFor`. Set this to force a smaller prompt on a model whose
+   * real window is smaller than the table assumes, or a larger one on a model
+   * the table doesn't know about.
+   */
+  contextBudget?: number | null;
 }
 
 export type CowriteModeConfig = CowriteConfig;
@@ -110,6 +118,7 @@ export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
   provider: null,
   model: null,
   temperature: 0.85,
+  contextBudget: null,
 };
 
 // ─── canonical defaults (mirror the prototype) ──────────────
@@ -123,13 +132,18 @@ export const DEFAULT_CONTEXT_RECIPES: ContextRecipes = {
     // the chapters leading up to it matters most. ('recentScenesVerbatim' was
     // here, but nothing ever populated it — it always rendered nothing.)
     'premise',
-    'precedingChapters:12',
+    'precedingChapters:60',
     'characterStates:present',
     'openThreads',
     'canon',
     'worldRules',
     'characterDefinitions:present',
+    'characterArcs',
+    'relationships',
     'worldSetting',
+    'factions',
+    'concepts',
+    'sources',
     'styleNotes',
   ],
   draft: [
@@ -142,27 +156,66 @@ export const DEFAULT_CONTEXT_RECIPES: ContextRecipes = {
     // The REAL prose of the chapters just before this one. High priority: the
     // model has to continue actual writing, not a summary of it. Summaries alone
     // let it contradict the text it is picking up from.
-    'precedingChapters:12',
+    'precedingChapters:60',
     'canon',
     'worldRules',
     'characterDefinitions:present',
+    // Who these people are to each other, and where each of them is headed.
+    // Without these the model writes each character correctly in isolation and
+    // still gets every scene between two of them wrong.
+    'relationships',
+    'characterArcs',
     'worldSetting',
+    'factions',
+    // The nonfiction backbone: the author's concept definitions and their
+    // research. A drafting model without these invents citations rather than
+    // using the ones the author has on file.
+    'concepts',
+    'sources',
+    'openThreads',
     'adjacentChapterSummaries',
     'styleNotes',
   ],
-  edit: ['targetTextFull', 'styleNotes', 'canon:minimal'],
+  // Editing used to see the prose, style notes, and only the first five canon
+  // facts — so it could contradict canon fact six, and knew nothing about the
+  // people in the passage it was rewriting.
+  edit: [
+    'targetTextFull',
+    'styleNotes',
+    'canon',
+    'worldRules',
+    'characterDefinitions:present',
+    'relationships',
+    'concepts',
+    'sources',
+  ],
   critique: [
     'targetTextFull',
     'canon',
     'worldRules',
     'openThreads',
     'characterStates:present',
+    'characterDefinitions:present',
+    'relationships',
+    'characterArcs',
+    'concepts',
+    'sources',
   ],
   // 'recentEvents:high-importance' is deliberately absent: the event log is no
   // longer authored anywhere in the UI, so it would be an empty section on every
   // new world. The renderer still handles the item for worlds whose saved recipe
   // names it and whose memory.events still has entries.
-  discuss: ['premise', 'canonSummary', 'worldRules', 'openThreads'],
+  discuss: [
+    'premise',
+    'canonSummary',
+    'worldRules',
+    'openThreads',
+    'characterDefinitions:present',
+    'relationships',
+    'worldSetting',
+    'concepts',
+    'sources',
+  ],
 };
 
 export const DEFAULT_MEMORY_WRITEBACK: MemoryWriteback = {

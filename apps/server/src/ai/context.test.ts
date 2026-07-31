@@ -175,9 +175,13 @@ test('banned words are not double-injected via the style-notes block', () => {
   const doc = worldWithCanonAndChar();
   doc.world.session.linguisticFilters = { bannedWords: ['zzqx'], bannedPhrases: [] };
   const ctx = assembleContext({ world: doc, mode: 'edit', characterId: null, targetChapterText: 'x' });
-  // 'zzqx' should appear once (the FORBIDDEN LANGUAGE header), not also in STYLE NOTES.
+  // A banned word appears exactly twice, both deliberate: the FORBIDDEN LANGUAGE
+  // header and the final-constraints trailer that restates it after the prose.
+  // What must NOT happen is a third copy leaking in via STYLE NOTES.
   const occurrences = ctx.system.split('zzqx').length - 1;
-  assert.equal(occurrences, 1);
+  assert.equal(occurrences, 2, 'header + trailer only');
+  const styleSection = ctx.system.match(/STYLE NOTES:\n([\s\S]*?)(\n\n|$)/)?.[1] ?? '';
+  assert.ok(!styleSection.includes('zzqx'), 'not restated as soft style guidance');
 });
 
 test('budget truncation drops later recipe items, keeps earlier ones', () => {
@@ -327,10 +331,13 @@ test('draft receives the real prose of the preceding chapters', () => {
 });
 
 test('long preceding chapters are trimmed from the FRONT, keeping their endings', () => {
+  // 'filler ' × 5000 is 35k chars — under the recipe's 60k cap, so a budget small
+  // enough to force the trim is what this test is about. A frontier-model budget
+  // would simply include the whole chapter, which is the point of the new default.
   const long = [{ title: 'Chapter 3', text: 'START_MARKER ' + 'filler '.repeat(5000) + 'FINAL_LINE.' }];
   const ctx = assembleContext({
     world: bookWorld(), mode: 'draft', characterId: null,
-    targetChapterMetaId: 'ch4', precedingChapters: long,
+    targetChapterMetaId: 'ch4', precedingChapters: long, budgetTokens: 4000,
   });
   assert.ok(ctx.system.includes('FINAL_LINE.'), 'the ending survives — it is what we continue from');
   assert.ok(!ctx.system.includes('START_MARKER'), 'the front is dropped');
@@ -389,8 +396,193 @@ test('a full draft prompt with three long chapters still fits the budget', () =>
   const long = THREE_BEFORE.map((c) => ({ title: c.title, text: c.text + ' ' + 'filler '.repeat(3000) }));
   const ctx = assembleContext({
     world: bookWorld(), mode: 'draft', characterId: null,
-    targetChapterMetaId: 'ch4', precedingChapters: long,
+    targetChapterMetaId: 'ch4', precedingChapters: long, budgetTokens: 6000,
   });
   assert.deepEqual(ctx.droppedItems, [], 'nothing is dropped');
   assert.ok(ctx.estimatedTokens < 6000, `within budget (was ${ctx.estimatedTokens})`);
+});
+
+test('a small budget shrinks the prose to fit instead of dropping it entirely', () => {
+  // The failure this guards against: a recipe cap larger than the budget yields a
+  // block too big to fit, which the budget loop drops WHOLE — costing the model
+  // all continuity prose when a trimmed excerpt would have fit fine.
+  const long = [{ title: 'Chapter 3', text: 'START_MARKER ' + 'filler '.repeat(20000) + 'FINAL_LINE.' }];
+  const ctx = assembleContext({
+    world: bookWorld(), mode: 'draft', characterId: null,
+    targetChapterMetaId: 'ch4', precedingChapters: long, budgetTokens: 3000,
+  });
+  assert.ok(!ctx.droppedItems.includes('precedingChapters:60'), 'prose is kept, not dropped');
+  assert.ok(ctx.system.includes('FINAL_LINE.'), 'and it is the ENDING that survives');
+  assert.ok(ctx.estimatedTokens <= 3000, `within budget (was ${ctx.estimatedTokens})`);
+});
+
+test('the shrinkable prose does not starve the fixed sections that follow it', () => {
+  // precedingChapters sits early in the draft recipe; canon and characters come
+  // after. A greedy prose section would eat the budget and silently drop them.
+  const doc = bookWorld();
+  doc.world.memory.canon.push({
+    id: 'c1', fact: 'CANON_MARKER: the lake never freezes.', establishedBy: [], immutable: true,
+  });
+  const long = [{ title: 'Chapter 3', text: 'filler '.repeat(20000) + 'FINAL_LINE.' }];
+  const ctx = assembleContext({
+    world: doc, mode: 'draft', characterId: null,
+    targetChapterMetaId: 'ch4', precedingChapters: long, budgetTokens: 3000,
+  });
+  assert.ok(ctx.system.includes('CANON_MARKER'), 'canon still reaches the model');
+  assert.ok(ctx.system.includes('Wants: forgiveness'), 'so do the character definitions');
+  assert.ok(ctx.estimatedTokens <= 3000, `within budget (was ${ctx.estimatedTokens})`);
+});
+
+// ── the research corpus: sources, concepts, factions, relationships, arcs ──
+
+function researchWorld() {
+  const doc = bookWorld();
+  const w = doc.world;
+  w.premise.logline = 'A town drowns twice.';
+  w.premise.genre = ['literary', 'mystery'];
+  w.premise.tone = 'elegiac';
+  w.premise.themes = ['inheritance', 'water'];
+  w.premise.thesis = 'Flood policy is a moral document.';
+  w.entities.characters.push({
+    id: 'c2', name: 'Henry', role: 'brother',
+    definition: { voice: 'Loud.', traits: 'rash', backstory: '', desires: 'escape', wounds: '', contradiction: '', knowledgeSkills: '' },
+    state: { location: [], status: 'alive', emotionalState: 'angry', knowledge: [], inventory: [] },
+    arc: { startingPoint: 'a boy who blames', trajectory: 'softening', endpoint: 'a man who forgives' },
+  });
+  w.entities.relationships.push({
+    id: 'r1', between: ['c1', 'c2'], type: 'siblings',
+    description: 'estranged since the funeral', tension: 'neither will say the name', history: [],
+  });
+  w.entities.factions.push({
+    id: 'f1', name: 'The Levee Board', description: 'Runs the waterworks.',
+    goals: 'Keep the dam funded.', members: ['c2'], tags: [],
+  });
+  w.entities.concepts.push({
+    id: 'k1', name: 'Managed retreat', definition: 'Moving a settlement rather than defending it.',
+    sources: ['s1'], relatedConcepts: [], authorPosition: 'I treat it as grief, not policy.',
+  });
+  w.entities.sources.push({
+    id: 's1', citation: 'Ward, "Tidewater" (2019)',
+    keyClaims: ['The levee failed before the surge.', 'The county knew by March.'],
+    notes: 'Chapter 4 is the useful one.', reliability: 'strong — primary records',
+  });
+  return doc;
+}
+
+test('drafting receives the research corpus: sources with their key claims', () => {
+  const ctx = assembleContext({
+    world: researchWorld(), mode: 'draft', characterId: null, targetChapterMetaId: 'ch4',
+  });
+  assert.match(ctx.system, /Ward, "Tidewater" \(2019\)/, 'the citation');
+  assert.match(ctx.system, /The levee failed before the surge/, 'the key claims themselves');
+  assert.match(ctx.system, /The county knew by March/);
+  assert.match(ctx.system, /strong — primary records/, 'reliability');
+  assert.match(ctx.system, /Never invent a citation/, 'framed against fabrication');
+});
+
+test("drafting receives the author's concept definitions, not the dictionary sense", () => {
+  const ctx = assembleContext({
+    world: researchWorld(), mode: 'draft', characterId: null, targetChapterMetaId: 'ch4',
+  });
+  assert.match(ctx.system, /Managed retreat/);
+  assert.match(ctx.system, /Moving a settlement rather than defending it/);
+  assert.match(ctx.system, /I treat it as grief, not policy/, "the author's position");
+});
+
+test('drafting receives relationships, arcs and factions', () => {
+  const ctx = assembleContext({
+    world: researchWorld(), mode: 'draft', characterId: null, targetChapterMetaId: 'ch4',
+  });
+  assert.match(ctx.system, /Claudette & Henry: siblings — estranged since the funeral/);
+  assert.match(ctx.system, /neither will say the name/, 'the tension between them');
+  assert.match(ctx.system, /Henry: from a boy who blames, becoming softening/, 'the arc');
+  assert.match(ctx.system, /The Levee Board/);
+  assert.match(ctx.system, /Members: Henry/, 'faction members resolve to names, not ids');
+});
+
+test('the premise carries genre, tone, themes and thesis — not just the logline', () => {
+  const ctx = assembleContext({ world: researchWorld(), mode: 'draft', characterId: null });
+  assert.match(ctx.system, /Genre: literary, mystery/);
+  assert.match(ctx.system, /Tone: elegiac/);
+  assert.match(ctx.system, /Themes: inheritance, water/);
+  assert.match(ctx.system, /Thesis: Flood policy is a moral document/);
+});
+
+test('editing sees FULL canon and the cast, not five facts and nothing else', () => {
+  const doc = researchWorld();
+  for (let i = 1; i <= 8; i++) {
+    doc.world.memory.canon.push({
+      id: `k${i}`, fact: `FACT_${i}.`, establishedBy: [], immutable: false,
+    });
+  }
+  const ctx = assembleContext({
+    world: doc, mode: 'edit', characterId: null, targetChapterText: 'The prose to edit.',
+  });
+  assert.match(ctx.system, /FACT_8\./, 'the eighth canon fact is not truncated away');
+  assert.match(ctx.system, /Wants: forgiveness/, 'the cast reaches an edit pass');
+  assert.match(ctx.system, /Claudette & Henry/, 'and so do their relationships');
+});
+
+test('a world with no research renders no empty SOURCES/CONCEPTS headers', () => {
+  const ctx = assembleContext({
+    world: bookWorld(), mode: 'draft', characterId: null, targetChapterMetaId: 'ch4',
+  });
+  assert.ok(!/SOURCES/.test(ctx.system), 'no empty sources section');
+  assert.ok(!/CONCEPTS/.test(ctx.system), 'no empty concepts section');
+  assert.ok(!/FACTIONS/.test(ctx.system), 'no empty factions section');
+  assert.ok(!/RELATIONSHIPS/.test(ctx.system), 'no empty relationships section');
+});
+
+test('a world saved with an OLD recipe still gets the newly-added material', () => {
+  // The regression this guards: recipes are stored per-world and frozen at
+  // creation, so an existing world would author sources and never see them.
+  const doc = researchWorld();
+  doc.world.session.contextRecipes.draft = ['premise', 'canon'];
+  doc.world.session.contextRecipes.edit = ['targetTextFull', 'styleNotes', 'canon:minimal'];
+
+  const draft = assembleContext({
+    world: doc, mode: 'draft', characterId: null, targetChapterMetaId: 'ch4',
+  });
+  assert.match(draft.system, /Ward, "Tidewater"/, 'sources reach a legacy draft recipe');
+  assert.match(draft.system, /Managed retreat/, 'and concepts');
+
+  // ...and the legacy edit recipe's canon:minimal is promoted to full canon.
+  for (let i = 1; i <= 8; i++) {
+    doc.world.memory.canon.push({ id: `k${i}`, fact: `FACT_${i}.`, establishedBy: [], immutable: false });
+  }
+  const edit = assembleContext({
+    world: doc, mode: 'edit', characterId: null, targetChapterText: 'x',
+  });
+  assert.match(edit.system, /FACT_8\./, 'canon:minimal is upgraded, not left at five facts');
+});
+
+test("an author's own recipe order is preserved; additions go at the end", () => {
+  const doc = researchWorld();
+  doc.world.session.contextRecipes.draft = ['canon', 'premise'];
+  const ctx = assembleContext({
+    world: doc, mode: 'draft', characterId: null, targetChapterMetaId: 'ch4',
+  });
+  // Match the section headers themselves — the words "canon" and "premise" also
+  // occur in the mode-contract instructions up in the header.
+  assert.ok(
+    ctx.system.indexOf('CANON (immutable truth') < ctx.system.indexOf('PREMISE:'),
+    "the author's own ordering is not reshuffled",
+  );
+  // The appended items land after both.
+  assert.ok(
+    ctx.system.indexOf('PREMISE:') < ctx.system.indexOf('SOURCES'),
+    'additions are appended, not inserted',
+  );
+});
+
+test('a dangling relationship id is skipped, not printed as undefined', () => {
+  const doc = researchWorld();
+  doc.world.entities.relationships.push({
+    id: 'r2', between: ['c1', 'ghost'], type: 'rivals', description: '', tension: '', history: [],
+  });
+  const ctx = assembleContext({
+    world: doc, mode: 'draft', characterId: null, targetChapterMetaId: 'ch4',
+  });
+  assert.ok(!/undefined/.test(ctx.system), 'no "undefined" leaks into the prompt');
+  assert.ok(!/rivals/.test(ctx.system), 'the unresolvable relationship is omitted');
 });

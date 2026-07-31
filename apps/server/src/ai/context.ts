@@ -17,6 +17,7 @@ import type {
 } from '@oread/shared';
 import { characterLocations } from '@oread/shared';
 import { contractInstructions, baseMode } from './permissions.js';
+import { contextBudgetFor } from './budget.js';
 
 /** Rough token estimate: ~4 chars/token. Good enough for budgeting. */
 export function estimateTokens(s: string): number {
@@ -40,7 +41,10 @@ export interface AssembleInput {
   recentScenes?: string[];
   /** the chapters immediately before the target, as real prose (oldest first) */
   precedingChapters?: { title: string; text: string }[];
-  /** total budget for the assembled context (system prompt), in tokens */
+  /**
+   * Total budget for the assembled context (system prompt), in tokens.
+   * Omit to derive it from the world's selected model — see `contextBudgetFor`.
+   */
   budgetTokens?: number;
 }
 
@@ -51,7 +55,12 @@ export interface AssembledContext {
   estimatedTokens: number;
 }
 
-type Section = { key: string; render: () => string | null };
+/**
+ * `render` receives the tokens still unspent when its turn comes, so a section
+ * that can shrink (preceding prose) fits itself to what is left rather than
+ * being dropped whole. Sections that can't shrink just ignore it.
+ */
+type Section = { key: string; render: (tokensAvailable: number) => string | null };
 
 // The author's OWN world is trusted authorial intent the model must follow — NOT
 // untrusted data. So world content below is presented as plain, authoritative
@@ -88,6 +97,44 @@ function linguisticBansBlock(world: World): string | null {
     'FORBIDDEN LANGUAGE (never output any of these words or phrases, in any form or inflection):',
     parts.join('\n'),
   );
+}
+
+/**
+ * The author's non-negotiable constraints, restated as the LAST thing the model
+ * reads.
+ *
+ * `absoluteRulesBlock` / `linguisticBansBlock` already put these in the header,
+ * but a modern prompt is mostly what follows: premise, canon, the world, and —
+ * since draft and co-write now include real manuscript prose — potentially
+ * thousands of words of the author's own writing. That prose is the strongest
+ * signal in the prompt about how to write, so if it contains a word the author
+ * has since banned, it teaches the model to use it. Restating the bans at the
+ * end, explicitly overriding the examples above, is what holds them.
+ */
+function finalConstraintsBlock(world: World): string | null {
+  const rules = (world.session.hardRules ?? []).map((r) => r.trim()).filter(Boolean);
+  const f = world.session.linguisticFilters;
+  const words = (f?.bannedWords ?? []).map((w) => w.trim()).filter(Boolean);
+  const phrases = (f?.bannedPhrases ?? []).map((p) => p.trim()).filter(Boolean);
+  if (rules.length === 0 && words.length === 0 && phrases.length === 0) return null;
+
+  const parts: string[] = [
+    'BEFORE YOU ANSWER — these override everything above, including any example ' +
+      'text or existing prose you were given. Earlier chapters may contain words ' +
+      'the author has since banned; that is not permission to reuse them.',
+  ];
+  if (rules.length) {
+    parts.push(`Rules that may never be broken:\n${rules.map((r) => `- ${r}`).join('\n')}`);
+  }
+  if (words.length) {
+    parts.push(
+      `NEVER write these words, in any form or inflection: ${words.join(', ')}.`,
+    );
+  }
+  if (phrases.length) {
+    parts.push(`NEVER write these phrases:\n${phrases.map((p) => `- ${p}`).join('\n')}`);
+  }
+  return parts.join('\n');
 }
 
 function canonBlock(world: World, minimal = false): string | null {
@@ -209,13 +256,29 @@ function presentCharacterDefinitions(world: World, characterId: string | null): 
  * Long chapters are trimmed from the FRONT, keeping each chapter's ending, since
  * what immediately precedes the new chapter matters most for continuity. The
  * nearest chapter gets the largest share.
+ *
+ * `charBudget` is the recipe's cap; `tokensAvailable` is what's actually left in
+ * the prompt. The smaller wins. Without that second limit a large recipe cap on
+ * a small-budget model produces a block too big to fit, which the budget loop
+ * then drops ENTIRELY — trading a trimmed excerpt for no continuity prose at
+ * all, which is the one outcome worth avoiding here.
  */
 function precedingChaptersBlock(
   chapters: { title: string; text: string }[] | undefined,
   charBudget: number,
+  tokensAvailable = Infinity,
 ): string | null {
   const list = (chapters ?? []).filter((c) => c.text.trim());
   if (list.length === 0) return null;
+
+  // Leave room for the section's own header and the inter-chapter labels.
+  const fromTokens = Number.isFinite(tokensAvailable)
+    ? Math.max(0, (tokensAvailable - 150) * 4)
+    : Infinity;
+  charBudget = Math.min(charBudget, fromTokens);
+  // Below a useful minimum, a stub excerpt is worse than none: it burns budget
+  // that fuller sections would use and teaches nothing about voice.
+  if (charBudget < 500) return null;
 
   // Weight toward the most recent chapter: it gets half, the rest share the rest.
   const parts: string[] = [];
@@ -235,17 +298,160 @@ function precedingChaptersBlock(
 
   return block(
     'THE CHAPTERS IMMEDIATELY BEFORE THIS ONE (the real text — continue from it, ' +
-      'match its voice, and do not contradict what happens here):',
+      'match its voice, and do not contradict what happens here). This is ' +
+      'reference for continuity and voice, NOT a licence to copy language the ' +
+      'author has banned — the rules at the end of this prompt still apply to ' +
+      'every word you write:',
     parts.join('\n\n'),
   );
 }
 
+/**
+ * The premise, whole. Logline and synopsis are the spine, but themes, genre and
+ * tone are what tell the model what KIND of book this is — and they were being
+ * dropped on the floor, so a literary novel and a pulp thriller reached the
+ * model looking identical. `thesis` is the nonfiction equivalent of a logline.
+ */
 function premiseBlock(world: World): string | null {
-  if (!world.premise.logline && !world.premise.synopsis) return null;
-  return block(
-    'PREMISE:',
-    `${world.premise.logline}${world.premise.synopsis ? `\n${world.premise.synopsis}` : ''}`,
-  );
+  const p = world.premise;
+  const parts: string[] = [];
+  if (p.logline?.trim()) parts.push(p.logline.trim());
+  if (p.synopsis?.trim()) parts.push(p.synopsis.trim());
+  if (p.thesis?.trim()) parts.push(`Thesis: ${p.thesis.trim()}`);
+
+  const meta: string[] = [];
+  const genre = (p.genre ?? []).map((g) => g.trim()).filter(Boolean);
+  const themes = (p.themes ?? []).map((t) => t.trim()).filter(Boolean);
+  if (genre.length) meta.push(`Genre: ${genre.join(', ')}`);
+  if (p.tone?.trim()) meta.push(`Tone: ${p.tone.trim()}`);
+  if (themes.length) meta.push(`Themes: ${themes.join(', ')}`);
+  if (meta.length) parts.push(meta.join('\n'));
+
+  return parts.length ? block('PREMISE:', parts.join('\n\n')) : null;
+}
+
+/**
+ * Who the cast are to EACH OTHER. `characterDefinitions` renders each person
+ * alone, which is enough to write a monologue and not enough to write a scene:
+ * two characters drawn correctly but with no history between them meet as
+ * strangers every time.
+ */
+function relationshipsBlock(world: World): string | null {
+  const byId = new Map(world.entities.characters.map((c) => [c.id, c.name]));
+  const lines = world.entities.relationships
+    .map((r) => {
+      const [a, b] = r.between;
+      const an = byId.get(a ?? '');
+      const bn = byId.get(b ?? '');
+      if (!an || !bn) return null; // dangling id — skip rather than print "undefined"
+      const bits = [r.type?.trim(), r.description?.trim()].filter(Boolean).join(' — ');
+      const tension = r.tension?.trim() ? `\n  Tension: ${r.tension.trim()}` : '';
+      return `- ${an} & ${bn}${bits ? `: ${bits}` : ''}${tension}`;
+    })
+    .filter(Boolean) as string[];
+  return lines.length ? block('RELATIONSHIPS:', lines.join('\n')) : null;
+}
+
+/**
+ * Where each character is HEADED. Arc was reaching the model only in character
+ * chat, so drafting had no idea whether a scene should be pushing someone
+ * toward their ending or holding them still.
+ */
+function characterArcsBlock(world: World, characterId: string | null): string | null {
+  const chars = characterId
+    ? world.entities.characters.filter((c) => c.id === characterId)
+    : world.entities.characters;
+  const lines = chars
+    .map((c) => {
+      const bits: string[] = [];
+      if (c.arc?.startingPoint?.trim()) bits.push(`from ${c.arc.startingPoint.trim()}`);
+      if (c.arc?.trajectory?.trim()) bits.push(`becoming ${c.arc.trajectory.trim()}`);
+      if (c.arc?.endpoint?.trim()) bits.push(`toward ${c.arc.endpoint.trim()}`);
+      return bits.length ? `- ${c.name}: ${bits.join(', ')}` : null;
+    })
+    .filter(Boolean) as string[];
+  return lines.length
+    ? block(
+        'CHARACTER ARCS (where each person is headed — move them along it, ' +
+          'but do not skip ahead of where they are now):',
+        lines.join('\n'),
+      )
+    : null;
+}
+
+/** Organisations, and what they want. */
+function factionsBlock(world: World): string | null {
+  const byId = new Map(world.entities.characters.map((c) => [c.id, c.name]));
+  const lines = (world.entities.factions ?? [])
+    .filter((f) => f.name?.trim())
+    .map((f) => {
+      const bits: string[] = [];
+      if (f.description?.trim()) bits.push(f.description.trim());
+      if (f.goals?.trim()) bits.push(`Goals: ${f.goals.trim()}`);
+      const members = (f.members ?? []).map((id) => byId.get(id) ?? id).filter(Boolean);
+      if (members.length) bits.push(`Members: ${members.join(', ')}`);
+      const detail = bits.length ? `\n  ${bits.join('\n  ')}` : '';
+      return `- ${f.name.trim()}${detail}`;
+    });
+  return lines.length ? block('FACTIONS:', lines.join('\n')) : null;
+}
+
+/**
+ * The author's concept definitions — the nonfiction backbone, and equally the
+ * place a fiction author pins down an invented system's terms. These had no
+ * renderer at all, so a model writing about the author's own ideas was working
+ * from the general meaning of the words rather than the author's definition.
+ */
+function conceptsBlock(world: World): string | null {
+  const byId = new Map((world.entities.concepts ?? []).map((c) => [c.id, c.name]));
+  const lines = (world.entities.concepts ?? [])
+    .filter((c) => c.name?.trim())
+    .map((c) => {
+      const bits: string[] = [];
+      if (c.definition?.trim()) bits.push(c.definition.trim());
+      if (c.authorPosition?.trim()) bits.push(`Author's position: ${c.authorPosition.trim()}`);
+      const related = (c.relatedConcepts ?? []).map((id) => byId.get(id) ?? id).filter(Boolean);
+      if (related.length) bits.push(`Related: ${related.join(', ')}`);
+      const detail = bits.length ? `\n  ${bits.join('\n  ')}` : '';
+      return `- ${c.name.trim()}${detail}`;
+    });
+  return lines.length
+    ? block(
+        "CONCEPTS (the author's own definitions — use these meanings, not the " +
+          'general sense of the words):',
+        lines.join('\n'),
+      )
+    : null;
+}
+
+/**
+ * The author's research, in full: citation, reliability, their position on it,
+ * their notes, and every key claim. Whole rather than trimmed — a model asked to
+ * write from research needs the claims themselves, not a list of book titles.
+ * This is what stops it inventing a citation when the real one is on file.
+ */
+function sourcesBlock(world: World): string | null {
+  const lines = (world.entities.sources ?? [])
+    .filter((s) => s.citation?.trim())
+    .map((s) => {
+      const bits: string[] = [];
+      if (s.reliability?.trim()) bits.push(`Reliability: ${s.reliability.trim()}`);
+      if (s.notes?.trim()) bits.push(`Notes: ${s.notes.trim()}`);
+      const claims = (s.keyClaims ?? []).map((k) => k.trim()).filter(Boolean);
+      if (claims.length) {
+        bits.push(`Key claims:\n${claims.map((k) => `   - ${k}`).join('\n')}`);
+      }
+      const detail = bits.length ? `\n  ${bits.join('\n  ')}` : '';
+      return `- ${s.citation.trim()}${detail}`;
+    });
+  return lines.length
+    ? block(
+        'SOURCES (the research on file — draw on these and cite them accurately. ' +
+          'Never invent a citation, and never attribute a claim to a source that ' +
+          'is not listed as making it):',
+        lines.join('\n'),
+      )
+    : null;
 }
 
 function styleNotesBlock(world: World): string | null {
@@ -327,7 +533,7 @@ function sectionsForRecipe(
         const charBudget = Number.isFinite(kchars) && kchars > 0 ? kchars * 1000 : 12000;
         sections.push({
           key: item,
-          render: () => precedingChaptersBlock(input.precedingChapters, charBudget),
+          render: (avail) => precedingChaptersBlock(input.precedingChapters, charBudget, avail),
         });
         break;
       }
@@ -400,6 +606,21 @@ function sectionsForRecipe(
       case 'premise':
         sections.push({ key: item, render: () => premiseBlock(world) });
         break;
+      case 'relationships':
+        sections.push({ key: item, render: () => relationshipsBlock(world) });
+        break;
+      case 'characterArcs':
+        sections.push({ key: item, render: () => characterArcsBlock(world, input.characterId) });
+        break;
+      case 'factions':
+        sections.push({ key: item, render: () => factionsBlock(world) });
+        break;
+      case 'concepts':
+        sections.push({ key: item, render: () => conceptsBlock(world) });
+        break;
+      case 'sources':
+        sections.push({ key: item, render: () => sourcesBlock(world) });
+        break;
       case 'styleNotes':
         sections.push({ key: item, render: () => styleNotesBlock(world) });
         break;
@@ -418,6 +639,48 @@ function sectionsForRecipe(
     }
   }
   return sections;
+}
+
+/**
+ * Recipe items that were added to the defaults after worlds were already being
+ * saved. A world document stores its OWN `contextRecipes`, frozen at the moment
+ * it was created, so an existing world would otherwise never see a newly-added
+ * context item — the author would fill in their sources and concepts and the
+ * model would still never be shown them, with nothing in the UI to explain why.
+ *
+ * So: for any recipe missing one of these keys, append it. Appending (rather
+ * than inserting) keeps the author's own priority order intact, and each item
+ * renders nothing when the world has no such material, so this is a no-op for
+ * worlds that never authored any. An author who deliberately removed an item
+ * gets it back — an acceptable trade for material silently never reaching the
+ * model, and recipes are not yet editable in the UI.
+ */
+const RECIPE_ADDITIONS: Record<ChatMode, string[]> = {
+  cowrite: ['relationships', 'characterArcs', 'factions', 'concepts', 'sources'],
+  draft: ['relationships', 'characterArcs', 'factions', 'concepts', 'sources'],
+  edit: ['worldRules', 'characterDefinitions:present', 'relationships', 'concepts', 'sources'],
+  critique: [
+    'characterDefinitions:present',
+    'relationships',
+    'characterArcs',
+    'concepts',
+    'sources',
+  ],
+  discuss: ['characterDefinitions:present', 'relationships', 'worldSetting', 'concepts', 'sources'],
+};
+
+function withRecipeAdditions(recipe: string[], mode: ChatMode): string[] {
+  // The old `edit` recipe asked for `canon:minimal` — only the first five canon
+  // facts — so an edit pass could contradict canon fact six while "having" canon.
+  // That cap existed to fit the old 6000-token budget and no longer earns its
+  // keep; promote it to full canon.
+  const upgraded =
+    mode === 'edit' ? recipe.map((i) => (i === 'canon:minimal' ? 'canon' : i)) : recipe;
+
+  // Compare on the key only: 'canon' and 'canon:minimal' are the same item.
+  const present = new Set(upgraded.map((i) => i.split(':')[0]!));
+  const missing = RECIPE_ADDITIONS[mode].filter((i) => !present.has(i.split(':')[0]!));
+  return missing.length ? [...upgraded, ...missing] : upgraded;
 }
 
 /**
@@ -587,7 +850,11 @@ function placesBlock(world: World): string | null {
 export function assembleContext(input: AssembleInput): AssembledContext {
   const world = input.world.world;
   const mode: ChatMode = baseMode(input.mode);
-  const budget = input.budgetTokens ?? 6000;
+  // Default from the world's own model rather than a flat constant: a 6000-token
+  // budget silently dropped most of the world on every turn for any model made
+  // in the last few years. An explicit budgetTokens still wins (tests, callers
+  // with a reason to clamp).
+  const budget = input.budgetTokens ?? contextBudgetFor(world.session.model);
 
   const header: string[] = [];
   header.push('You are the AI writing partner in Oread Studio.');
@@ -645,16 +912,45 @@ export function assembleContext(input: AssembleInput): AssembledContext {
     if (style) header.push(style);
   }
 
-  const recipe = world.session.contextRecipes[mode] ?? [];
+  const recipe = withRecipeAdditions(world.session.contextRecipes[mode] ?? [], mode);
   const sections = sectionsForRecipe(recipe, input, world);
+
+  // The constraints are restated at the very END as well as the top. They are
+  // stated once in the header, but everything after them — especially the
+  // author's own preceding prose, which can run to thousands of words — competes
+  // for attention, and prose containing a banned word actively teaches the model
+  // to use it. Repeating the constraints last puts them in the most recent,
+  // highest-salience position. Its cost is reserved BEFORE the budget loop so a
+  // long prompt can never squeeze out the one thing that must never be dropped.
+  const trailer = finalConstraintsBlock(world);
+  const trailerCost = trailer ? estimateTokens(trailer) + 2 : 0;
 
   const parts: string[] = [...header];
   const included: string[] = [];
   const dropped: string[] = [];
-  let used = estimateTokens(parts.join('\n\n'));
+  let used = estimateTokens(parts.join('\n\n')) + trailerCost;
+
+  // Preceding prose can be enormous and sits EARLY in the recipe (it is the
+  // highest-value context for continuity), so left unchecked it would eat the
+  // budget that canon, characters and the world need. Render the fixed-size
+  // sections first to learn their true cost, then let the shrinkable prose have
+  // whatever is genuinely spare. Output order still follows the recipe.
+  const renderedByKey = new Map<string, string | null>();
+  const shrinkable = new Set(['precedingChapters']);
+  let fixedCost = 0;
+  for (const section of sections) {
+    if (shrinkable.has(section.key.split(':')[0]!)) continue;
+    const r = section.render(Infinity);
+    renderedByKey.set(section.key, r);
+    if (r) fixedCost += estimateTokens(r) + 2;
+  }
+  const spareForShrinkable = Math.max(0, budget - used - fixedCost);
 
   for (const section of sections) {
-    const rendered = section.render();
+    const isShrinkable = shrinkable.has(section.key.split(':')[0]!);
+    const rendered = isShrinkable
+      ? section.render(spareForShrinkable)
+      : (renderedByKey.get(section.key) ?? null);
     if (!rendered) continue;
     const cost = estimateTokens(rendered) + 2;
     if (used + cost > budget) {
@@ -665,6 +961,8 @@ export function assembleContext(input: AssembleInput): AssembledContext {
     included.push(section.key);
     used += cost;
   }
+
+  if (trailer) parts.push(trailer);
 
   const system = parts.join('\n\n');
   return {

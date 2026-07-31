@@ -37,6 +37,8 @@ export type FieldKind =
   | 'longlist'
   | 'proselist'
   | 'num'
+  /** number, but blank means "unset" — commits null rather than 0 */
+  | 'numOrAuto'
   | 'enum'
   | 'ro'
   | 'date'
@@ -613,7 +615,9 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
   if (key === 'session') {
     const sess = w.session;
     // One model/credential for the whole world — shared by every mode.
-    const model = sess.model ?? { credentialId: null, provider: null, model: null, temperature: 0.85 };
+    const model = sess.model ?? {
+      credentialId: null, provider: null, model: null, temperature: 0.85, contextBudget: null,
+    };
     const modelGroup: DetailGroup = {
       heading: 'Model & sampling — shared by every mode',
       fields: [
@@ -622,6 +626,15 @@ export function nodeDetail(doc: WorldDocument | null, key: string | null): NodeD
         F('Provider', 'world.session.model.provider', model.provider ?? '', 'ro'),
         F('Model', 'world.session.model.model', model.model ?? '', 'model'),
         F('Temperature', 'world.session.model.temperature', model.temperature ?? 0.85, 'num'),
+        // Blank = derive from the selected model (see the server's contextBudgetFor).
+        // Only worth setting if a model's real window is smaller than assumed, or
+        // to deliberately send less of the world.
+        F(
+          'Context budget in tokens — blank for auto',
+          'world.session.model.contextBudget',
+          model.contextBudget ?? null,
+          'numOrAuto',
+        ),
       ],
     };
 
