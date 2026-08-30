@@ -8,10 +8,11 @@ import {
   baseMode,
 } from './permissions.js';
 
-test('critique applies nothing; edit is applicable', () => {
-  assert.equal(contractFor('critique').applicable, false);
+test('the suggestion modes are applicable on an explicit accept', () => {
+  // Both produce a redline the author may accept; neither ever applies itself.
+  assert.equal(contractFor('critique').applicable, true);
   assert.equal(contractFor('edit').applicable, true);
-  assert.throws(() => assertApplyAllowed('critique'), ModePermissionError);
+  assert.doesNotThrow(() => assertApplyAllowed('critique'));
   assert.doesNotThrow(() => assertApplyAllowed('edit'));
 });
 

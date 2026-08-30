@@ -108,6 +108,13 @@ export interface ChatMessage {
   char?: string;
   text?: string;
   sug?: import('./world.js').Suggestion;
+  /**
+   * The mode that PRODUCED this message. Applying a suggestion must be attributed
+   * to the mode it came from — the apply route derives both the permission check
+   * and the revision reason from it, so a hardcoded value mislabels history and
+   * lets a non-applicable mode slip through.
+   */
+  mode?: PersistedChatMode;
   status?: 'pending' | 'accepted' | 'rejected';
   /** web sources cited when the turn used research (only present if any) */
   citations?: WebCitation[];

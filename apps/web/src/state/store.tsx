@@ -736,7 +736,8 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
         const base: ChatMessage = { id: nextId(), role: 'assistant', char: s.character, time: nowTime() };
         let assistant: ChatMessage;
         if (done.kind === 'suggestion' && done.suggestion) {
-          assistant = { ...base, kind: 'suggestion', sug: done.suggestion, status: 'pending' };
+          // Stamp the producing mode: apply is attributed to it, not to a guess.
+          assistant = { ...base, kind: 'suggestion', sug: done.suggestion, mode: s.mode, status: 'pending' };
         } else {
           assistant = {
             ...base,
@@ -776,16 +777,25 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
       if (apply && sug?.proposed && s.chapterRowId) {
         // Applying goes through the server so the pre_ai_edit revision is taken.
         try {
+          // Flush pending prose FIRST. The server replaces a span in the text it
+          // reads from the database; if the debounce were still holding the
+          // author's latest keystrokes, the server would work from stale prose
+          // and the queued autosave would then overwrite the applied result.
+          await autosave.flush();
           await apiWorlds.chapters.get(s.chapterRowId); // ensure exists
+          const mode = msg?.mode ?? 'edit';
           const res = await fetch('/api/ai/apply', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             credentials: 'same-origin',
             body: JSON.stringify({
-              mode: 'edit',
+              mode,
               chapterRowId: s.chapterRowId,
+              // The span to replace. Without it the server can only append, which
+              // leaves the flagged text in place for the next pass to re-flag.
+              original: sug.original,
               text: sug.proposed,
-              reason: 'pre_ai_edit',
+              reason: mode === 'edit' ? 'pre_ai_edit' : 'pre_ai_draft',
             }),
           });
           if (!res.ok) {
@@ -812,7 +822,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
       }));
       showToast(apply ? 'Applied to the manuscript' : 'Suggestion accepted');
     },
-    [s.msgs, s.chapterRowId, showToast, showError],
+    [s.msgs, s.chapterRowId, autosave, showToast, showError],
   );
 
   const rejectSuggestion = useCallback(

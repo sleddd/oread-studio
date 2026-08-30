@@ -181,7 +181,7 @@ export function WriteView(): JSX.Element {
           <textarea
             value={chapter?.content ?? ''}
             onChange={(e) => store.setChapterText(e.target.value)}
-            spellCheck={false}
+            spellCheck
             placeholder={FORMAT_SPECS[store.format].placeholder}
             style={{
               width: '100%',

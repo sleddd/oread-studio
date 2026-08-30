@@ -14,6 +14,13 @@ import { getStore } from '../storage/index.js';
 import { emptyWorld } from '../world/factory.js';
 import { validateWorld, WorldValidationError } from '../world/validate.js';
 
+/**
+ * Minimum gap between two 'autosave' revisions for the same chapter. Prose still
+ * saves on the 2.5s debounce; this only rate-limits the history rows, each of
+ * which holds a full copy of the chapter text.
+ */
+const AUTOSAVE_REVISION_MS = 5 * 60 * 1000;
+
 function ctxOf(req: FastifyRequest): { schemaName: string } {
   return { schemaName: req.auth!.user.schemaName };
 }
@@ -224,12 +231,33 @@ export async function worldRoutes(app: FastifyInstance): Promise<void> {
   // taken: 'autosave' is the debounced typing checkpoint (prunable), 'manual' is
   // an explicit Save Draft the author asked for (never pruned). Only those two are
   // accepted here — pre_ai_* reasons belong to the AI apply path.
+  //
+  // Prose is saved on EVERY request, but an 'autosave' revision is only taken
+  // when the newest one for this chapter is older than AUTOSAVE_REVISION_MS.
+  // The 2.5s debounce fires often and each revision row holds the chapter's full
+  // text, so snapshotting every write grew the table by a whole copy of the
+  // chapter per pause — the durability of frequent saves without the volume.
+  // 'manual' is the author asking for a draft point and is never throttled.
   app.put<{ Params: { cid: string }; Body: { content: string; reason?: RevisionReason } }>(
     '/api/chapters/:cid/content',
     async (req, reply) => {
       if (!auth(req, reply)) return;
-      const reason: RevisionReason = req.body?.reason === 'manual' ? 'manual' : 'autosave';
-      const ch = await store.saveChapterContent(ctxOf(req), req.params.cid, req.body?.content ?? '', reason);
+      const ctx = ctxOf(req);
+      const requested: RevisionReason = req.body?.reason === 'manual' ? 'manual' : 'autosave';
+
+      let reason: RevisionReason | undefined = requested;
+      if (requested === 'autosave') {
+        const revisions = await store.listChapterRevisions(ctx, req.params.cid);
+        // listChapterRevisions returns newest-first in both backends.
+        const last = revisions[0];
+        if (last && Date.now() - Date.parse(last.created_at) < AUTOSAVE_REVISION_MS) {
+          // Too soon — save the prose, skip the snapshot. Passing no reason is
+          // what tells the store not to write a revision row at all.
+          reason = undefined;
+        }
+      }
+
+      const ch = await store.saveChapterContent(ctx, req.params.cid, req.body?.content ?? '', reason);
       return reply.send({ chapter: ch });
     },
   );

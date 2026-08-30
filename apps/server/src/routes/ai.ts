@@ -8,7 +8,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { PersistedChatMode } from '@oread/shared';
 import { getStore } from '../storage/index.js';
 import { generate } from '../ai/orchestrator.js';
-import { assertApplyAllowed, baseMode, ModePermissionError } from '../ai/permissions.js';
+import { assertApplyAllowed, baseMode, contractFor, ModePermissionError } from '../ai/permissions.js';
 import type { ChatTurn } from '../ai/provider.js';
 
 /**
@@ -48,9 +48,15 @@ interface GenerateBody {
 interface ApplyBody {
   mode: PersistedChatMode;
   chapterRowId: string;
-  /** prose to append (cowrite/draft) or the suggestion's proposed text (edit) */
+  /** prose to append (cowrite/draft) or the suggestion's proposed text (edit/critique) */
   text: string;
-  /** 'pre_ai_draft' for draft/cowrite, 'pre_ai_edit' for edit */
+  /**
+   * The exact span the suggestion targets (`suggestion.original`). Present for
+   * the suggestion modes, where applying means REPLACING this span with `text`.
+   * Absent for cowrite/draft, where applying means appending a new passage.
+   */
+  original?: string;
+  /** 'pre_ai_draft' for draft/cowrite, 'pre_ai_edit' for edit/critique */
   reason: 'pre_ai_draft' | 'pre_ai_edit';
 }
 
@@ -137,7 +143,7 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
     if (!auth(req, reply)) return;
     const body = req.body;
     try {
-      assertApplyAllowed(body.mode); // critique/discuss cannot apply
+      assertApplyAllowed(body.mode); // discuss cannot apply
     } catch (e) {
       if (e instanceof ModePermissionError) return reply.code(403).send({ error: e.message });
       throw e;
@@ -154,10 +160,33 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
     const chapter = await store.getChapter(ctxOf(req), body.chapterRowId);
     if (!chapter) return reply.code(404).send({ error: 'chapter not found' });
 
-    // Append the applied text (matches prototype: insert with a blank line).
-    const newContent = chapter.content
-      ? `${chapter.content}\n\n${body.text}`
-      : body.text;
+    // How the text lands depends on what the mode produces.
+    //
+    // A SUGGESTION (edit/critique) is a redline: `original` -> `text`. Applying
+    // it must REPLACE that span. Appending instead left the flagged sentence in
+    // place, so the next pass saw the same defect and re-flagged it forever.
+    //
+    // PROSE (cowrite/draft) is a new passage, which appends with a blank line.
+    //
+    // Replacement is on the FIRST occurrence only: a redline targets one span,
+    // and replaceAll would rewrite unrelated identical sentences elsewhere.
+    let newContent: string;
+    const original = body.original;
+    if (contractFor(body.mode).output === 'suggestion' && original) {
+      const at = chapter.content.indexOf(original);
+      if (at === -1) {
+        // The span is gone — the author edited that passage after the suggestion
+        // was generated. Appending here would silently duplicate stale text, so
+        // refuse and let the client say so.
+        return reply.code(409).send({
+          error: 'The text this suggestion targets has changed. Re-run it against the current draft.',
+        });
+      }
+      newContent =
+        chapter.content.slice(0, at) + body.text + chapter.content.slice(at + original.length);
+    } else {
+      newContent = chapter.content ? `${chapter.content}\n\n${body.text}` : body.text;
+    }
 
     // The store's saveChapterContent with a revision reason snapshots the OLD
     // content BEFORE overwriting — this IS the revision-before-AI-write guarantee.

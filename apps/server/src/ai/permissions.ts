@@ -5,7 +5,7 @@
  *  - cowrite   → prose, insertable
  *  - draft     → prose; may NOT contradict canon (canon injected + instructed)
  *  - edit      → suggestion (original→proposed); may NOT invent plot
- *  - critique  → suggestion; applies NOTHING (client must never auto-apply)
+ *  - critique  → suggestion; applied only on an explicit author accept
  *  - character → discuss variant; speaks only as the character, respecting
  *                state.knowledge
  */
@@ -62,8 +62,12 @@ export const MODE_CONTRACTS: Record<ChatMode, ModeContract> = {
     memoryWriteback: 'decisions-if-structural',
   },
   critique: {
+    // Critique proposes lines as well as observing, and the UI offers Apply on
+    // them. It stays a SUGGESTION (original -> proposed, replacing that span);
+    // what it may never do is apply itself — every application is an explicit
+    // author accept, never automatic.
     output: 'suggestion',
-    applicable: false, // critique applies NOTHING
+    applicable: true,
     protectCanon: true,
     mayInventPlot: false,
     mayResearch: false, // works on the user's own text

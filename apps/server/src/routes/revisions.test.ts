@@ -6,7 +6,7 @@
 import { test, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -140,4 +140,73 @@ test('restore without a revisionId is a 400', async () => {
     payload: {},
   });
   assert.equal(res.statusCode, 400);
+});
+
+test('rapid autosaves collapse to one revision but every save persists the prose', async () => {
+  const ch = await newChapter('v1');
+
+  for (const content of ['v2', 'v3', 'v4']) {
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/chapters/${ch.id}/content`,
+      payload: { content },
+    });
+    assert.equal(res.statusCode, 200);
+  }
+
+  // The prose is current despite the skipped snapshots — throttling history must
+  // never cost the author a save.
+  const live = await store.getChapter(CTX(), ch.id);
+  assert.equal(live!.content, 'v4', 'latest prose is persisted');
+
+  const revs = await store.listChapterRevisions(CTX(), ch.id);
+  assert.equal(revs.length, 1, 'three rapid autosaves leave one revision');
+  assert.equal(revs[0]!.content, 'v1', 'it snapshots the text as it was before the first write');
+});
+
+test("an explicit 'manual' draft point is never throttled", async () => {
+  const ch = await newChapter('v1');
+
+  await app.inject({
+    method: 'PUT',
+    url: `/api/chapters/${ch.id}/content`,
+    payload: { content: 'v2' },
+  });
+  // Immediately after an autosave — inside the throttle window. Save Draft is the
+  // author asking for a point in history, so it must land regardless.
+  await app.inject({
+    method: 'PUT',
+    url: `/api/chapters/${ch.id}/content`,
+    payload: { content: 'v3', reason: 'manual' },
+  });
+
+  const revs = await store.listChapterRevisions(CTX(), ch.id);
+  assert.deepEqual(revs.map((r) => r.reason).sort(), ['autosave', 'manual']);
+});
+
+test('an autosave resumes once the throttle window has passed', async () => {
+  const ch = await newChapter('v1');
+
+  await app.inject({
+    method: 'PUT',
+    url: `/api/chapters/${ch.id}/content`,
+    payload: { content: 'v2' },
+  });
+
+  // Age the existing revision past the 5-minute window, on disk.
+  const worldId = (await store.getChapter(CTX(), ch.id))!.world_id;
+  assert.ok(worldId, 'chapter belongs to a world');
+  const sidePath = join(dir, worldId, 'store.json');
+  const side = JSON.parse(readFileSync(sidePath, 'utf8'));
+  side.revisions[0].created_at = new Date(Date.now() - 6 * 60 * 1000).toISOString();
+  writeFileSync(sidePath, JSON.stringify(side, null, 2));
+
+  await app.inject({
+    method: 'PUT',
+    url: `/api/chapters/${ch.id}/content`,
+    payload: { content: 'v3' },
+  });
+
+  const revs = await store.listChapterRevisions(CTX(), ch.id);
+  assert.equal(revs.length, 2, 'a new autosave revision is taken after the window');
 });

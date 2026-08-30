@@ -70,7 +70,8 @@ Where they conflict with older wording further down, THESE win.
 9. **Chapter revision control.** Every prose write snapshots the PREVIOUS content
    into `chapter_revisions` first, so history is complete and each row holds full
    text (not a diff). The `reason` grades it:
-   - `autosave` — the 2.5s debounced typing checkpoint. Prunable.
+   - `autosave` — the debounced typing checkpoint, rate-limited to at most one
+     per chapter per 5 minutes. Prunable.
    - `manual` — an explicit **Save Draft**, and the auto-snapshot taken before a
      restore. A deliberate draft point; **never pruned**.
    - `pre_ai_edit` / `pre_ai_draft` — the text immediately before an AI-applied
@@ -265,10 +266,13 @@ loudly on malformed documents.
 - **World document persists on explicit action only** (Save World button +
   discrete events) — never on keystroke or timer (Settled Decision #3).
 - **Chapter-prose autosave:** debounced 2–3s idle, writes the `chapters.content`
-  TEXT column. This is the ONLY autosaving writer. Snapshot to
-  `chapter_revisions` BEFORE any AI-applied change (reason pre_ai_edit /
-  pre_ai_draft) — these are kept forever. Autosave revisions on a rolling
-  interval, pruned after 30 days.
+  TEXT column. This is the ONLY autosaving writer. Every write persists the
+  prose, but an `autosave` **revision** is taken at most once per chapter per
+  5 minutes — revision rows hold full text, so snapshotting every debounce grew
+  history by a whole chapter copy per typing pause. `manual` is never throttled.
+  Snapshot to `chapter_revisions` BEFORE any AI-applied change (reason
+  pre_ai_edit / pre_ai_draft) — these are kept forever. Autosave revisions on a
+  rolling interval, pruned after 30 days.
 - **World snapshots** before any AI-initiated world mutation and before
   migrations — stored as JSON-Patch **deltas** (+ occasional full), per
   Settled Decision #5.
