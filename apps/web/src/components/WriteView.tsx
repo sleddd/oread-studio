@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import type { Editor } from '@tiptap/react';
 import { useStore } from '../state/store.js';
 import { WRITING_FORMATS, FORMAT_SPECS, editorTypography } from '@oread/shared';
 import type { WritingFormat } from '@oread/shared';
 import { RevisionHistory } from './RevisionHistory.js';
+import { FormatToolbar } from './FormatToolbar.js';
+import { ProseEditor } from './ProseEditor.js';
 
 const chapterActionStyle = (enabled: boolean, fontSize: number) => ({
   flex: '0 0 auto' as const,
@@ -22,11 +25,16 @@ const chapterActionStyle = (enabled: boolean, fontSize: number) => ({
 export function WriteView(): JSX.Element {
   const store = useStore();
   const [historyOpen, setHistoryOpen] = useState(false);
+  // The Tiptap instance, lifted so the toolbar can drive the document.
+  const [editor, setEditor] = useState<Editor | null>(null);
   const chapter = store.activeChapter;
   const meta = store.world?.world.structure.chapters.find((c) => c.id === chapter?.chapter_id);
   const type = editorTypography(store.format, store.proseTypeface);
   const status = chapter?.status ?? 'outline';
   const wordCount = chapter?.word_count ?? 0;
+  const text = chapter?.content ?? '';
+
+  const onEditor = useCallback((e: Editor | null) => setEditor(e), []);
 
   return (
     <>
@@ -168,6 +176,7 @@ export function WriteView(): JSX.Element {
         </div>
         {historyOpen && chapter && <RevisionHistory onClose={() => setHistoryOpen(false)} />}
       </div>
+      <FormatToolbar editor={editor} disabled={!chapter} />
       <div
         style={{
           flex: '1 1 auto',
@@ -178,23 +187,14 @@ export function WriteView(): JSX.Element {
         }}
       >
         <div style={{ width: '100%', maxWidth: type.width }}>
-          <textarea
-            value={chapter?.content ?? ''}
-            onChange={(e) => store.setChapterText(e.target.value)}
-            spellCheck
+          <ProseEditor
+            key={chapter?.id ?? 'none'}
+            value={text}
             placeholder={FORMAT_SPECS[store.format].placeholder}
-            style={{
-              width: '100%',
-              minHeight: '60vh',
-              background: 'transparent',
-              border: 'none',
-              resize: 'none',
-              color: '#e6e9e7',
-              fontFamily: type.font,
-              fontSize: type.size,
-              lineHeight: type.lineHeight,
-              letterSpacing: '0.005em',
-            }}
+            typography={type}
+            disabled={!chapter}
+            onChange={store.setChapterText}
+            onEditor={onEditor}
           />
         </div>
       </div>

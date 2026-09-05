@@ -586,3 +586,65 @@ test('a dangling relationship id is skipped, not printed as undefined', () => {
   assert.ok(!/undefined/.test(ctx.system), 'no "undefined" leaks into the prompt');
   assert.ok(!/rivals/.test(ctx.system), 'the unresolvable relationship is omitted');
 });
+
+/**
+ * Character chat and discuss must never carry manuscript prose.
+ *
+ * The route loads the open chapter for every mode, so the prose reaches the
+ * assembler regardless — these recipes are what keep it out of the prompt. A
+ * 27-page chapter in every roleplay turn would cost more than the entire rest
+ * of the context put together.
+ */
+test('character chat carries no manuscript prose, however much is supplied', () => {
+  const doc = worldWithCanonAndChar();
+  const chapter = 'The lake was still that morning and nobody spoke of it. '.repeat(1500);
+
+  for (const mode of ['character', 'discuss'] as const) {
+    const out = assembleContext({
+      world: doc,
+      mode,
+      characterId: mode === 'character' ? 'sam' : null,
+      userAs: null,
+      targetChapterText: chapter,
+      precedingChapters: [
+        { title: 'Ch 1', text: chapter },
+        { title: 'Ch 2', text: chapter },
+      ],
+      budgetTokens: 100_000,
+    });
+    assert.equal(
+      out.system.includes('The lake was still that morning'),
+      false,
+      `${mode} must not include chapter prose`,
+    );
+    // Cheap in absolute terms: the whole prompt is a fraction of one page.
+    assert.ok(
+      out.estimatedTokens < 2_000,
+      `${mode} context should stay small, got ${out.estimatedTokens}`,
+    );
+  }
+});
+
+// The trailer used to say "existing prose you were given" in EVERY mode, so a
+// character was told it had been handed the manuscript when it had not — and
+// answered as though it had read the chapter.
+test('the closing constraints only claim prose when prose was included', () => {
+  const doc = worldWithCanonAndChar();
+  doc.world.session.hardRules = ['Never contradict canon.'];
+
+  const character = assembleContext({
+    world: doc, mode: 'character', characterId: 'sam', userAs: null, budgetTokens: 100_000,
+  });
+  assert.equal(character.system.includes('existing prose you were given'), false);
+  assert.ok(character.system.includes('BEFORE YOU ANSWER'));
+
+  const cowrite = assembleContext({
+    world: doc,
+    mode: 'cowrite',
+    characterId: null,
+    userAs: null,
+    precedingChapters: [{ title: 'Ch 1', text: 'She ran home.' }],
+    budgetTokens: 100_000,
+  });
+  assert.ok(cowrite.system.includes('existing prose you were given'));
+});

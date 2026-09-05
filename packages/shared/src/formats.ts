@@ -3,6 +3,7 @@
  * server-side rendering). Mirrors the prototype's FORMATS + renderVals logic.
  */
 import type { WritingFormat } from './storage.js';
+import { proseToText } from './prose-html.js';
 
 export type ProseTypeface = 'Serif' | 'Sans' | 'Monospace';
 
@@ -59,7 +60,12 @@ export function editorTypography(
   return { font, size: '18.5px', lineHeight: '1.75', width };
 }
 
+/**
+ * Word count for stored prose. Content may be HTML (rich-text editor) or legacy
+ * plain text, so tags are stripped first — otherwise `<strong>` and friends
+ * would each be counted as words.
+ */
 export function countWords(text: string): number {
-  const t = text.trim();
+  const t = proseToText(text).trim();
   return t ? t.split(/\s+/).length : 0;
 }

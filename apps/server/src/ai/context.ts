@@ -111,17 +111,22 @@ function linguisticBansBlock(world: World): string | null {
  * has since banned, it teaches the model to use it. Restating the bans at the
  * end, explicitly overriding the examples above, is what holds them.
  */
-function finalConstraintsBlock(world: World): string | null {
+function finalConstraintsBlock(world: World, hasProse: boolean): string | null {
   const rules = (world.session.hardRules ?? []).map((r) => r.trim()).filter(Boolean);
   const f = world.session.linguisticFilters;
   const words = (f?.bannedWords ?? []).map((w) => w.trim()).filter(Boolean);
   const phrases = (f?.bannedPhrases ?? []).map((p) => p.trim()).filter(Boolean);
   if (rules.length === 0 && words.length === 0 && phrases.length === 0) return null;
 
+  // Only claim prose was supplied when it actually was. Character chat and
+  // discuss get no manuscript, and telling them they were "given existing
+  // prose" made characters answer as if they had read the chapter.
   const parts: string[] = [
-    'BEFORE YOU ANSWER — these override everything above, including any example ' +
-      'text or existing prose you were given. Earlier chapters may contain words ' +
-      'the author has since banned; that is not permission to reuse them.',
+    hasProse
+      ? 'BEFORE YOU ANSWER — these override everything above, including any example ' +
+        'text or existing prose you were given. Earlier chapters may contain words ' +
+        'the author has since banned; that is not permission to reuse them.'
+      : 'BEFORE YOU ANSWER — these override everything above.',
   ];
   if (rules.length) {
     parts.push(`Rules that may never be broken:\n${rules.map((r) => `- ${r}`).join('\n')}`);
@@ -922,7 +927,11 @@ export function assembleContext(input: AssembleInput): AssembledContext {
   // to use it. Repeating the constraints last puts them in the most recent,
   // highest-salience position. Its cost is reserved BEFORE the budget loop so a
   // long prompt can never squeeze out the one thing that must never be dropped.
-  const trailer = finalConstraintsBlock(world);
+  // Whether this mode's recipe actually renders manuscript prose. Only then may
+  // the trailer refer to prose the model "was given".
+  const proseItems = new Set(['targetTextFull', 'targetOutlineBeats', 'precedingChapters']);
+  const hasProse = recipe.some((item) => proseItems.has(item.split(':')[0] ?? item));
+  const trailer = finalConstraintsBlock(world, hasProse);
   const trailerCost = trailer ? estimateTokens(trailer) + 2 : 0;
 
   const parts: string[] = [...header];

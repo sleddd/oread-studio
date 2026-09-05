@@ -5,6 +5,7 @@
  * (reason pre_ai_edit / pre_ai_draft). Critique output can never be applied.
  */
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { proseToText, replaceTextSpan, appendProse } from '@oread/shared';
 import type { PersistedChatMode } from '@oread/shared';
 import { getStore } from '../storage/index.js';
 import { generate } from '../ai/orchestrator.js';
@@ -76,9 +77,16 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
     let targetText: string | undefined;
     let targetChapterMetaId: string | undefined;
     let precedingChapters: { title: string; text: string }[] | undefined;
-    if (body.targetChapterId) {
+    // Character chat and discuss render no prose (their recipes omit every
+    // prose item), so loading the manuscript for them is pure waste: a read of
+    // up to four chapters, HTML-stripped, then discarded by the assembler.
+    const usesProse = baseMode(body.mode) !== 'discuss';
+    if (body.targetChapterId && usesProse) {
       const ch = await store.getChapter(ctxOf(req), body.targetChapterId);
-      targetText = ch?.content;
+      // Prose is stored as HTML, but every mode contract is written against
+      // plain text: the model must not spend budget on tags nor learn to emit
+      // them. Strip at this boundary, and only here.
+      targetText = ch ? proseToText(ch.content) : undefined;
       targetChapterMetaId = ch?.chapter_id;
 
       // The chapters immediately BEFORE this one, as actual prose. Draft and
@@ -90,10 +98,10 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
         const titleOf = (row: { chapter_id: string }): string =>
           world.world.structure.chapters.find((m) => m.id === row.chapter_id)?.title ?? 'Untitled';
         precedingChapters = siblings
-          .filter((c) => c.order < ch.order && c.content.trim())
+          .filter((c) => c.order < ch.order && proseToText(c.content).trim())
           .sort((a, b) => a.order - b.order)
           .slice(-PRECEDING_CHAPTERS)
-          .map((c) => ({ title: titleOf(c), text: c.content }));
+          .map((c) => ({ title: titleOf(c), text: proseToText(c.content) }));
       }
     }
 
@@ -170,11 +178,15 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
     //
     // Replacement is on the FIRST occurrence only: a redline targets one span,
     // and replaceAll would rewrite unrelated identical sentences elsewhere.
+    //
+    // The model quotes `original` as PLAIN text while the prose is stored as
+    // HTML, so the span is located against the text projection and mapped back
+    // onto the markup — formatting outside the replaced span is preserved.
     let newContent: string;
     const original = body.original;
     if (contractFor(body.mode).output === 'suggestion' && original) {
-      const at = chapter.content.indexOf(original);
-      if (at === -1) {
+      const replaced = replaceTextSpan(chapter.content, original, body.text);
+      if (replaced === null) {
         // The span is gone — the author edited that passage after the suggestion
         // was generated. Appending here would silently duplicate stale text, so
         // refuse and let the client say so.
@@ -182,10 +194,9 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
           error: 'The text this suggestion targets has changed. Re-run it against the current draft.',
         });
       }
-      newContent =
-        chapter.content.slice(0, at) + body.text + chapter.content.slice(at + original.length);
+      newContent = replaced;
     } else {
-      newContent = chapter.content ? `${chapter.content}\n\n${body.text}` : body.text;
+      newContent = appendProse(chapter.content, body.text);
     }
 
     // The store's saveChapterContent with a revision reason snapshots the OLD

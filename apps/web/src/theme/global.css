@@ -97,3 +97,98 @@ select {
     transform: translateY(0);
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Manuscript editor (Tiptap).
+
+   The editor renders real document nodes, so headings, quotes and lists are
+   styled here rather than being spelled out in markup the author has to see.
+   Sizes are relative (em) so they follow the per-format typography set on the
+   editor element.
+   --------------------------------------------------------------------------- */
+.ProseMirror {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+/*
+ * A full blank line between blocks. Prose needs the paragraph break to read as
+ * a break — below one line-height the paragraphs visibly run together. `em`
+ * follows the per-format font size, and 1.75 matches the line-height set on the
+ * editor element, so the gap is exactly one empty line.
+ *
+ * The first block has no margin, so the text starts flush with the top of the
+ * writing area rather than dropping a line.
+ */
+.ProseMirror > * {
+  margin: 0;
+}
+.ProseMirror > * + * {
+  margin-top: 1.75em;
+}
+/* List rows are one list, not separate paragraphs — they keep a tight rhythm. */
+.ProseMirror li + li {
+  margin-top: 0.25em;
+}
+.ProseMirror ul > li > p + p,
+.ProseMirror ol > li > p + p {
+  margin-top: 0.5em;
+}
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3 {
+  font-weight: 600;
+  color: #f2f4f3;
+  line-height: 1.25;
+  /* A heading gets extra air above it, but never less than a paragraph break. */
+  margin: 2em 0 0;
+}
+.ProseMirror h1 {
+  font-size: 1.5em;
+}
+.ProseMirror h2 {
+  font-size: 1.25em;
+}
+.ProseMirror h3 {
+  font-size: 1.1em;
+}
+.ProseMirror blockquote {
+  border-left: 2px solid var(--accent, #2e9d9d);
+  padding-left: 0.9em;
+  margin-left: 0;
+  color: #aeb4b2;
+  font-style: italic;
+}
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 1.3em;
+  /* Only the horizontal inset here — the blank line above a list comes from the
+   * block rhythm above, and resetting `margin` outright would cancel it. */
+  margin-left: 0;
+  margin-right: 0;
+  margin-bottom: 0;
+}
+.ProseMirror li {
+  margin: 0;
+}
+.ProseMirror li p {
+  margin: 0;
+}
+.ProseMirror strong {
+  color: #ffffff;
+  font-weight: 700;
+}
+.ProseMirror em {
+  font-style: italic;
+}
+.ProseMirror s {
+  color: #8b918f;
+}
+/* Placeholder for an empty chapter: shown only while the doc is truly empty. */
+.ProseMirror.is-editor-empty:first-child::before,
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: #4f5655;
+}
