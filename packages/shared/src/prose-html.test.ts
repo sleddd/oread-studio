@@ -128,3 +128,20 @@ test('paragraph structure survives the editor round trip', () => {
   assert.equal((asHtml.match(/<p>/g) ?? []).length, 3);
   assert.equal(proseToText(asHtml), legacy);
 });
+
+// The revision preview and any other read-only view of prose render plain text,
+// so stored HTML has to be projected — it was showing raw tags to the author.
+test('a stored chapter previews as readable prose, not markup', () => {
+  const stored = '<h1>Chapter 1</h1><p>The letter <strong>arrives</strong>.</p>';
+  const preview = proseToText(stored);
+  assert.ok(!preview.includes('<'), `preview still contains markup: ${preview}`);
+  assert.equal(preview, 'Chapter 1\n\nThe letter arrives.');
+});
+
+// "Insert into the manuscript" adds AI plain text to stored prose. Joining the
+// two with a blank line left an unwrapped paragraph inside the markup.
+test('inserting AI prose into an HTML chapter stays well-formed', () => {
+  const out = appendProse('<p>One.</p>', 'Two.\n\nThree.');
+  assert.equal(out, '<p>One.</p><p>Two.</p><p>Three.</p>');
+  assert.equal(proseToText(out), 'One.\n\nTwo.\n\nThree.');
+});

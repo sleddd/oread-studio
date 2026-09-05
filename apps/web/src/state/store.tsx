@@ -29,7 +29,7 @@ import type {
   CredentialMeta,
   Provider,
 } from '@oread/shared';
-import { countWords } from '@oread/shared';
+import { countWords, appendProse } from '@oread/shared';
 import * as apiWorlds from '../api/index.js';
 import { streamGenerate } from '../api/streaming.js';
 import { applyAccent } from '../theme/tokens.js';
@@ -760,9 +760,11 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
   const insertProse = useCallback(
     async (text: string) => {
       if (!s.chapterRowId) return;
+      // Prose is stored as HTML; the AI writes plain text. Joining them with a
+      // blank line would leave the paragraph unwrapped in the middle of the
+      // markup, so append in whichever form the chapter is actually stored in.
       const cur = activeChapter?.content ?? '';
-      const merged = cur ? `${cur}\n\n${text}` : text;
-      setChapterText(merged);
+      setChapterText(appendProse(cur, text));
       await autosave.flush();
       patch({ view: 'write', selectedNode: null });
       showToast('Inserted into the manuscript');

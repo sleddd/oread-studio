@@ -13,6 +13,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useStore } from '../state/store.js';
+import { proseToText } from '@oread/shared';
 import type { ChapterRevisionRow, RevisionReason } from '@oread/shared';
 
 const REASON_LABEL: Record<RevisionReason, string> = {
@@ -190,7 +191,9 @@ export function RevisionHistory({ onClose }: { onClose: () => void }): JSX.Eleme
                 fontFamily: "'Newsreader',serif",
               }}
             >
-              {selected.content.trim() || '(this version was empty)'}
+              {/* Prose is stored as HTML; this preview is plain text, so render
+                  the text projection rather than the raw markup. */}
+              {proseToText(selected.content).trim() || '(this version was empty)'}
             </div>
             <div
               style={{
