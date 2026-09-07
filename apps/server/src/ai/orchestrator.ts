@@ -58,6 +58,15 @@ export interface GenerateOutput {
   citations?: WebCitation[];
   /** whether a real provider or the mock produced this */
   usedMock: boolean;
+  /**
+   * The model id this reply actually came from.
+   *
+   * A world can be set to an unpinned provider alias, which the provider may
+   * repoint at new weights without notice — replies then change character with
+   * nothing in the world changing. Recording what really answered makes that
+   * visible instead of leaving the author to suspect their own prompts.
+   */
+  model?: string;
   includedContext: string[];
   droppedContext: string[];
 }
@@ -223,7 +232,7 @@ export async function generate(params: GenerateParams): Promise<GenerateOutput> 
 
   if (contract.output === 'suggestion') {
     const suggestion = coerceSuggestion(result.text, params.targetChapterId, mode);
-    const out: GenerateOutput = { kind: 'suggestion', suggestion, usedMock: false, includedContext: assembled.includedItems, droppedContext: assembled.droppedItems };
+    const out: GenerateOutput = { kind: 'suggestion', suggestion, usedMock: false, model, includedContext: assembled.includedItems, droppedContext: assembled.droppedItems };
     assertResultAllowed(mode, out.kind);
     return out;
   }
@@ -236,6 +245,7 @@ export async function generate(params: GenerateParams): Promise<GenerateOutput> 
     text: stripFenceTags(result.text),
     citations: result.citations,
     usedMock: false,
+    model,
     includedContext: assembled.includedItems,
     droppedContext: assembled.droppedItems,
   };

@@ -65,3 +65,33 @@ export const PROVIDER_MODELS: Record<Provider, ModelOption[]> = {
   ],
 };
 
+
+/**
+ * Whether a model id pins specific weights.
+ *
+ * Bedrock inference-profile ids come in two shapes. A pinned id carries the
+ * model's release date and version — `us.anthropic.claude-opus-4-5-20251101-v1:0`
+ * — and always resolves to those exact weights. A floating alias omits them —
+ * `us.anthropic.claude-opus-4-7` — and AWS may repoint it at updated weights
+ * without notice.
+ *
+ * That distinction matters to an author: a world set to a floating alias can
+ * change how it writes overnight with no change to the prompt or the code,
+ * which is indistinguishable from a bug in the app and impossible to reproduce
+ * afterwards. Surfacing it lets the author choose a pinned id when they want a
+ * character's voice to stay put.
+ */
+export function isPinnedModelId(id: string): boolean {
+  if (!id) return false;
+  // A date (YYYYMMDD) or an explicit version suffix (-v1:0 / :0) pins it.
+  return /\d{8}/.test(id) || /-v\d+:\d+$/.test(id) || /:\d+$/.test(id);
+}
+
+/** Human explanation for a floating id, or null when the id is pinned. */
+export function modelDriftWarning(id: string): string | null {
+  return isPinnedModelId(id)
+    ? null
+    : 'This id has no version pinned, so the provider may update the model behind it ' +
+        'without notice — replies can change character without anything in your world ' +
+        'changing. Pick an id with a date/version to keep it fixed.';
+}

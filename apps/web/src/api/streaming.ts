@@ -22,6 +22,8 @@ export interface GenerateDone {
   suggestion?: Suggestion;
   citations?: WebCitation[];
   usedMock: boolean;
+  /** The model id that actually produced this reply (see isPinnedModelId). */
+  model?: string;
   includedContext: string[];
   droppedContext: string[];
 }

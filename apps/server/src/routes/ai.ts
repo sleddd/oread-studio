@@ -132,6 +132,7 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
       sse('done', {
         kind: out.kind,
         text: out.text,
+        model: out.model,
         suggestion: out.suggestion,
         citations: out.citations,
         usedMock: out.usedMock,

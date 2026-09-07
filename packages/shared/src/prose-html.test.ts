@@ -145,3 +145,33 @@ test('inserting AI prose into an HTML chapter stays well-formed', () => {
   assert.equal(out, '<p>One.</p><p>Two.</p><p>Three.</p>');
   assert.equal(proseToText(out), 'One.\n\nTwo.\n\nThree.');
 });
+
+import { isPinnedModelId, modelDriftWarning } from './index.js';
+
+/**
+ * A world set to a floating Bedrock alias can change how it writes overnight —
+ * same prompt, same code, different weights — which reads as the app breaking.
+ */
+test('dated and versioned model ids count as pinned', () => {
+  for (const id of [
+    'us.anthropic.claude-opus-4-5-20251101-v1:0',
+    'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+    'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+    'us.amazon.nova-pro-v1:0',
+    'mistral.mistral-large-2407-v1:0',
+  ]) {
+    assert.equal(isPinnedModelId(id), true, id);
+    assert.equal(modelDriftWarning(id), null, id);
+  }
+});
+
+test('bare aliases are flagged as able to drift', () => {
+  for (const id of [
+    'us.anthropic.claude-opus-4-7',
+    'us.anthropic.claude-sonnet-4-6',
+    'claude-opus-4-8',
+  ]) {
+    assert.equal(isPinnedModelId(id), false, id);
+    assert.match(modelDriftWarning(id) ?? '', /may update the model behind it/, id);
+  }
+});

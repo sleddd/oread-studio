@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../state/store.js';
 import { nodeDetail, asText, parseMultiDelimList, type EditableField } from '../state/nodeDetail.js';
-import { PROVIDER_MODELS } from '@oread/shared';
+import { PROVIDER_MODELS, isPinnedModelId, modelDriftWarning } from '@oread/shared';
 import { credentials as credApi } from '../api/index.js';
 
 const fieldBox = {
@@ -580,6 +580,8 @@ function ModelPicker({ value, onChange }: { value: string; onChange: (v: string)
   }, [credentialId, provider]);
 
   const known = options.some((o) => o.id === value);
+
+  const driftWarning = value ? modelDriftWarning(value) : null;
   const [custom, setCustom] = useState(false);
 
   if (!provider) {
@@ -626,10 +628,33 @@ function ModelPicker({ value, onChange }: { value: string; onChange: (v: string)
         {options.map((o) => (
           <option key={o.id} value={o.id}>
             {o.label ?? o.id}
+            {isPinnedModelId(o.id) ? '' : ' — unpinned'}
           </option>
         ))}
         <option value="__custom__">custom…</option>
       </select>
+      {/*
+        An unpinned id (no date/version) can be repointed at new weights by the
+        provider, so a world's voice can change with nothing in the world
+        changing. Say so where the choice is made rather than leaving the author
+        to diagnose it as a bug in their own prompts.
+      */}
+      {driftWarning && (
+        <div
+          style={{
+            fontSize: 11,
+            lineHeight: 1.5,
+            color: '#c9922e',
+            marginTop: 6,
+            border: '1px solid rgba(201,146,46,0.35)',
+            background: 'rgba(201,146,46,0.08)',
+            borderRadius: 8,
+            padding: '7px 9px',
+          }}
+        >
+          {driftWarning}
+        </div>
+      )}
       <div style={{ fontSize: 11, color: '#4f5655', marginTop: 4 }}>
         {source === 'loading'
           ? 'Loading models…'
