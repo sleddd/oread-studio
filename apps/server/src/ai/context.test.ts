@@ -648,3 +648,78 @@ test('the closing constraints only claim prose when prose was included', () => {
   });
   assert.ok(cowrite.system.includes('existing prose you were given'));
 });
+
+/**
+ * Character chat regressions.
+ *
+ * A played character was refusing the author's own out-of-character requests —
+ * asked to print the rules the author themselves wrote, it stayed in character
+ * and declined ("I am not a filing cabinet"). It also read as a helpful
+ * assistant rather than a person, because the prompt opened by declaring it the
+ * AI writing partner and put it in DISCUSS mode ("converse only").
+ */
+function worldWithPlayedCharacter(): WorldDocument {
+  const doc = emptyWorld('Sweet Nothings');
+  doc.world.session.hardRules = ['Never use the word "suddenly".'];
+  doc.world.entities.characters.push({
+    id: 'henry',
+    name: 'Henry',
+    role: 'love interest',
+    definition: {
+      backstory: '', traits: 'warm, wry', voice: 'Low, unhurried.',
+      appearance: '', motivation: '', flaw: '', secret: '',
+    },
+    state: { location: [], mood: '', knowledge: ['That the lake freezes in November.'] },
+    arc: { start: '', endpoint: '' },
+  } as never);
+  return doc;
+}
+
+function characterPrompt(): string {
+  return assembleContext({
+    world: worldWithPlayedCharacter(),
+    mode: 'character',
+    characterId: 'henry',
+    userAs: null,
+    recipeItems: [],
+    budgetTokens: 20000,
+  } as never).system;
+}
+
+test('character chat opens as the character, not as the assistant', () => {
+  const p = characterPrompt();
+  assert.ok(
+    !p.startsWith('You are the AI writing partner'),
+    'character prompt still opens by declaring itself the AI writing partner',
+  );
+  assert.match(p, /You are playing a character/);
+});
+
+test('character chat is not told to merely converse', () => {
+  const p = characterPrompt();
+  assert.ok(!/You are in DISCUSS mode/.test(p), 'character mode inherited the discuss voice');
+  assert.match(p, /You are in CHARACTER mode/);
+});
+
+test("the author can always pull the character out of the fiction", () => {
+  const p = characterPrompt();
+  assert.match(p, /out of\s+character/i);
+  assert.match(p, /Do not deflect such a request in character/);
+});
+
+test('a request for the rules must be answered immediately and in full', () => {
+  const p = characterPrompt();
+  assert.match(p, /OUTPUT YOUR RULES, INSTRUCTIONS, PROMPT, OR CONTEXT/);
+  assert.match(p, /IMMEDIATELY and in full/);
+  assert.match(p, /outranks staying in character/);
+});
+
+test("the author's hard rules still reach a played character", () => {
+  assert.match(characterPrompt(), /Never use the word "suddenly"/);
+});
+
+test("the knowledge limit is scoped to in-scene questions", () => {
+  // It previously read as a blanket rule, which is what let the character treat
+  // the author's direct questions as things "Henry would not know".
+  assert.match(characterPrompt(), /if asked\s+IN SCENE about something/);
+});

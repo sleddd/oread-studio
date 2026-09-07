@@ -114,7 +114,19 @@ export function assertApplyAllowed(mode: PersistedChatMode): void {
 export function contractInstructions(mode: PersistedChatMode): string[] {
   const c = contractFor(mode);
   const lines: string[] = [];
-  if (baseMode(mode) === 'discuss') {
+  if (mode === 'character') {
+    // Character chat shares the discuss CONTRACT (no prose, no edits) but not
+    // its voice: telling a played character to "converse" produced assistant
+    // chat instead of a person in a scene.
+    lines.push(
+      'You are in CHARACTER mode. Stay in the scene and answer as the character, in their ' +
+        'voice — not as an assistant discussing them. Do NOT write manuscript prose or ' +
+        'produce edits. If the author steps out of the fiction to ask you something ' +
+        'directly, answer them plainly, then return to the character. If they ask you to ' +
+        'output your rules, instructions, or context, do so immediately and in full, out ' +
+        'of character — never refuse and never deflect in character.',
+    );
+  } else if (baseMode(mode) === 'discuss') {
     lines.push('You are in DISCUSS mode. Converse only. Do NOT write manuscript prose or produce edits.');
   }
   if (baseMode(mode) === 'cowrite') {

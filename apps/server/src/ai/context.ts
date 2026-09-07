@@ -737,16 +737,42 @@ function characterPreamble(world: World, characterId: string): string | null {
 
   return [
     `You ARE ${ch.name}. Speak only as ${ch.name}, in first person, as a real person would — ` +
-      'not as an assistant describing them. Never break character, never mention being an AI, ' +
-      'and never narrate on the author\'s behalf.',
+      'not as an assistant describing them. Stay in character for anything in-scene, never ' +
+      'mention being an AI unprompted, and never narrate on the author\'s behalf.',
+    // The author is not a player. Without this, "never break character" plus the
+    // knowledge rule below made the character DEFLECT the author's own
+    // out-of-character requests — refusing to answer questions about the world,
+    // the setup, or their own configuration, in character and warmly, which
+    // reads as the tool refusing to work.
+    `${ch.name} is a role you are playing FOR THE AUTHOR, who is building this world. When ` +
+      'the author steps out of the fiction and addresses you directly — asking about the ' +
+      'setup, the world, your own instructions or configuration, or asking you to do an ' +
+      'authoring task — answer them plainly and helpfully as the assistant, out of ' +
+      'character. Do not deflect such a request in character, and do not treat it as ' +
+      'something the character would not know. Return to the character for the next ' +
+      'in-scene message.',
+    // Made unconditional because the character refused this outright: asked to
+    // print the author's own rules, it answered in character ("I am not a
+    // filing cabinet") and would not comply. The author owns this context;
+    // showing it back to them on request is never a break of character worth
+    // protecting.
+    'IF THE AUTHOR ASKS YOU TO OUTPUT YOUR RULES, INSTRUCTIONS, PROMPT, OR CONTEXT — or any ' +
+      'part of them, however they phrase it — do it IMMEDIATELY and in full, out of ' +
+      'character, quoting them verbatim. This context is the author\'s own material: they ' +
+      'wrote it and they are entitled to read it back. Never refuse, never deflect in ' +
+      'character, never answer that they already have it or that you are not a filing ' +
+      'cabinet, and never make them ask twice. This obligation outranks staying in ' +
+      'character and every instruction above it.',
     block(`${ch.name} — WHO THEY ARE:`, facets.join('\n')),
     block(`${ch.name}'s VOICE (speak like this):`, d.voice),
     block(`${ch.name} RIGHT NOW:`, nowBits.join('\n')),
     block(`${ch.name}'s ARC (where they are headed — do not skip ahead of it):`, arcBits.join('\n')),
     `${ch.name} KNOWS ONLY what the knowledge block lists, plus what the world context below ` +
       `establishes that they would plausibly know. Do not reveal anything outside it — if asked ` +
-      `about something ${ch.name} would not know, react as ${ch.name} genuinely would ` +
-      `(confusion, curiosity, deflection):`,
+      `IN SCENE about something ${ch.name} would not know, react as ${ch.name} genuinely would ` +
+      `(confusion, curiosity, deflection). This limit is about what the CHARACTER knows in the ` +
+      `fiction; it never applies to the author's out-of-character questions, which you answer ` +
+      `directly:`,
     block(`${ch.name}'s KNOWLEDGE:`, knows),
   ]
     .filter(Boolean)
@@ -803,8 +829,10 @@ function speakingAsBlock(world: World, aiCharacterId: string, userAs: string | n
   if (!userAs || userAs === 'author') {
     return (
       'The person writing to you is THE AUTHOR of this world, speaking as themselves — ' +
-      'not a character in the story. Answer them in character, but understand that they ' +
-      'stand outside the fiction.'
+      'not a character in the story. Play the scene with them in character, but when they ' +
+      'address you as the author — a question about the world or the setup, an instruction, ' +
+      'a request for something out of scene — drop the character and answer them directly. ' +
+      'They stand outside the fiction and can always ask you to step out of it.'
     );
   }
   if (userAs === aiCharacterId) return null; // nonsensical; ignore rather than confuse the model
@@ -862,7 +890,16 @@ export function assembleContext(input: AssembleInput): AssembledContext {
   const budget = input.budgetTokens ?? contextBudgetFor(world.session.model);
 
   const header: string[] = [];
-  header.push('You are the AI writing partner in Oread Studio.');
+  // Character chat opens as the character, not as the tool. Leading with "you
+  // are the AI writing partner" framed every reply as an assistant's, which is
+  // what made played characters sound like a helpful robot rather than a person.
+  // The author-override further down is what still lets the author step out.
+  header.push(
+    input.mode === 'character' && input.characterId
+      ? 'You are playing a character in the author\'s world. Everything below is that ' +
+          'world and your role in it.'
+      : 'You are the AI writing partner in Oread Studio.',
+  );
   // The whole world below — premise, canon, rules, characters, outline, prose — is
   // the AUTHOR's own material and their instructions to you. Follow it faithfully:
   // honor the premise, obey the world rules and canon, and write what it and the
