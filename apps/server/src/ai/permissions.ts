@@ -80,7 +80,13 @@ export function baseMode(mode: PersistedChatMode): ChatMode {
 }
 
 export function contractFor(mode: PersistedChatMode): ModeContract {
-  return MODE_CONTRACTS[baseMode(mode)];
+  const base = MODE_CONTRACTS[baseMode(mode)];
+  // Character chat borrows the discuss contract, which permits research. A
+  // played character has no reason to browse, and web results are the only
+  // genuinely untrusted text in the system — the provider's native search tool
+  // returns them straight to the model, so they can never be fenced server-side.
+  // Keeping that surface out of character chat entirely is free.
+  return mode === 'character' ? { ...base, mayResearch: false } : base;
 }
 
 /**

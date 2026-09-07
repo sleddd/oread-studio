@@ -47,3 +47,11 @@ test('memory writeback matches the spec table', () => {
   assert.equal(contractFor('draft').memoryWriteback, 'events+chapterStatus');
   assert.equal(contractFor('critique').memoryWriteback, 'nothing');
 });
+
+// Web search results are the only untrusted text that reaches the model, and
+// the provider's native tool hands them over directly — they cannot be fenced.
+// A played character has no reason to browse, so that surface stays closed.
+test('character chat may not research the web', () => {
+  assert.equal(contractFor('character').mayResearch, false);
+  assert.equal(contractFor('discuss').mayResearch, true);
+});
