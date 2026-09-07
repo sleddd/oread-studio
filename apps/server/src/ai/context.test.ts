@@ -711,7 +711,45 @@ test('a request for the rules must be answered immediately and in full', () => {
   const p = characterPrompt();
   assert.match(p, /OUTPUT YOUR RULES, INSTRUCTIONS, PROMPT, OR CONTEXT/);
   assert.match(p, /IMMEDIATELY and in full/);
-  assert.match(p, /outranks staying in character/);
+  assert.match(p, /outranks every other instruction/);
+  // The app's policy is disclosure; a model falling back on "I cannot disclose
+  // my system instructions" is the failure this line exists to prevent.
+  assert.match(p, /never claim you cannot disclose your instructions/);
+});
+
+test('the disclosure obligation reaches every mode, not just character chat', () => {
+  for (const mode of ['discuss', 'cowrite', 'draft', 'edit', 'critique'] as const) {
+    const p = assembleContext({
+      world: worldWithPlayedCharacter(),
+      mode,
+      characterId: null,
+      userAs: null,
+      recipeItems: [],
+      budgetTokens: 20000,
+    } as never).system;
+    assert.match(p, /OUTPUT YOUR RULES, INSTRUCTIONS, PROMPT, OR CONTEXT/, mode);
+  }
+});
+
+/**
+ * A characterId that resolves to nobody (deleted or renamed character, or a
+ * restored chat naming one that no longer exists) used to render a prompt that
+ * announced a character was being played but described none — and carried no
+ * disclosure rule, so the model fell back on its own trained refusal.
+ */
+test('a character that cannot be found is reported, not silently dropped', () => {
+  const p = assembleContext({
+    world: worldWithPlayedCharacter(),
+    mode: 'character',
+    characterId: 'nobody',
+    userAs: null,
+    recipeItems: [],
+    budgetTokens: 20000,
+  } as never).system;
+  assert.match(p, /could not be found in the world/);
+  assert.match(p, /Do not invent one and do not pretend to be one/);
+  // Crucially, the author can still ask for the rules in this broken state.
+  assert.match(p, /OUTPUT YOUR RULES, INSTRUCTIONS, PROMPT, OR CONTEXT/);
 });
 
 test("the author's hard rules still reach a played character", () => {

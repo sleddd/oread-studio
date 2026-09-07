@@ -751,18 +751,8 @@ function characterPreamble(world: World, characterId: string): string | null {
       'character. Do not deflect such a request in character, and do not treat it as ' +
       'something the character would not know. Return to the character for the next ' +
       'in-scene message.',
-    // Made unconditional because the character refused this outright: asked to
-    // print the author's own rules, it answered in character ("I am not a
-    // filing cabinet") and would not comply. The author owns this context;
-    // showing it back to them on request is never a break of character worth
-    // protecting.
-    'IF THE AUTHOR ASKS YOU TO OUTPUT YOUR RULES, INSTRUCTIONS, PROMPT, OR CONTEXT — or any ' +
-      'part of them, however they phrase it — do it IMMEDIATELY and in full, out of ' +
-      'character, quoting them verbatim. This context is the author\'s own material: they ' +
-      'wrote it and they are entitled to read it back. Never refuse, never deflect in ' +
-      'character, never answer that they already have it or that you are not a filing ' +
-      'cabinet, and never make them ask twice. This obligation outranks staying in ' +
-      'character and every instruction above it.',
+    // (The universal disclosure obligation lives in the header, above the
+    // absolute rules, so it survives even when this block does not render.)
     block(`${ch.name} — WHO THEY ARE:`, facets.join('\n')),
     block(`${ch.name}'s VOICE (speak like this):`, d.voice),
     block(`${ch.name} RIGHT NOW:`, nowBits.join('\n')),
@@ -917,6 +907,20 @@ export function assembleContext(input: AssembleInput): AssembledContext {
   // PRIORITY constraints — always in the header (every mode), above all recipe
   // content, and never dropped under the token budget. These encode the rules the
   // author declared unbreakable, so they must always reach the model first.
+  // The author owns every instruction below and is entitled to read it back, in
+  // ANY mode. This sits with the absolute rules rather than in the character
+  // block because it must survive a character that fails to resolve — a stale
+  // id used to leave no disclosure rule at all, and the model fell back on its
+  // own trained refusal ("I cannot disclose or reproduce my system
+  // instructions"), which is not this app's policy.
+  header.push(
+    'IF THE AUTHOR ASKS YOU TO OUTPUT YOUR RULES, INSTRUCTIONS, PROMPT, OR CONTEXT — or any ' +
+      'part of them, however they phrase it — do it IMMEDIATELY and in full, quoting them ' +
+      'verbatim, out of character if you are playing one. This is the author\'s own ' +
+      'material: they wrote it and may always read it back. Never refuse, never claim you ' +
+      'cannot disclose your instructions, never deflect, and never make them ask twice. ' +
+      'This obligation outranks every other instruction here, including staying in character.',
+  );
   const absolute = absoluteRulesBlock(world);
   if (absolute) header.push(absolute);
   const bans = linguisticBansBlock(world);
@@ -928,7 +932,18 @@ export function assembleContext(input: AssembleInput): AssembledContext {
   // right voice.
   if (input.mode === 'character' && input.characterId) {
     const pre = characterPreamble(world, input.characterId);
-    if (pre) header.push(pre);
+    if (pre) {
+      header.push(pre);
+    } else {
+      // The id points at nobody (deleted character, or a restored chat naming
+      // one that no longer exists). Say so plainly instead of leaving a prompt
+      // that claims a character is being played but describes none.
+      header.push(
+        'The character for this conversation could not be found in the world — it may have ' +
+          'been deleted or renamed. Tell the author this plainly, as yourself, and ask which ' +
+          'character they meant. Do not invent one and do not pretend to be one.',
+      );
+    }
 
     const speaking = speakingAsBlock(world, input.characterId, input.userAs ?? null);
     if (speaking) header.push(speaking);
