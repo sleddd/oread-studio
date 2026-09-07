@@ -675,6 +675,15 @@ function worldWithPlayedCharacter(): WorldDocument {
   return doc;
 }
 
+function characterPromptWithStyle(styleNotes: string): string {
+  const doc = worldWithPlayedCharacter();
+  doc.world.session.styleNotes = styleNotes;
+  return assembleContext({
+    world: doc, mode: 'character', characterId: 'henry', userAs: null,
+    recipeItems: [], budgetTokens: 20000,
+  } as never).system;
+}
+
 function characterPrompt(): string {
   return assembleContext({
     world: worldWithPlayedCharacter(),
@@ -760,4 +769,49 @@ test("the knowledge limit is scoped to in-scene questions", () => {
   // It previously read as a blanket rule, which is what let the character treat
   // the author's direct questions as things "Henry would not know".
   assert.match(characterPrompt(), /if asked\s+IN SCENE about something/);
+});
+
+/**
+ * A played character was replying with long, therapising monologues —
+ * interpreting the author's inner life back to them — regardless of the
+ * author's style notes asking for brief, human replies.
+ *
+ * Two causes: nothing in the character prompt said anything about turn length
+ * or register, so the model used its default emotional-support voice; and the
+ * author's own style/tone direction sat mid-prompt in a soft "STYLE NOTES"
+ * section labelled for manuscript prose (it even named a "narrator voice",
+ * which a two-hander does not have).
+ */
+test('character chat is told how long a turn should be', () => {
+  const p = characterPrompt();
+  assert.match(p, /HOW TO SPEAK IN THIS CONVERSATION/);
+  assert.match(p, /Keep turns SHORT/);
+  assert.match(p, /Never deliver a monologue/);
+});
+
+test('character chat is told not to interpret the author back to them', () => {
+  const p = characterPrompt();
+  assert.match(p, /Do not narrate, interpret, or diagnose the author's inner state/);
+  assert.match(p, /No therapy register/);
+});
+
+test("the author's style direction is binding, not soft styling", () => {
+  const p = characterPromptWithStyle('Keep replies BRIEF. No therapy speak.');
+  assert.match(p, /STYLE AND TONE DIRECTION — follow this exactly/);
+  assert.match(p, /overrides any default habit of yours/);
+  assert.match(p, /Keep replies BRIEF\. No therapy speak\./);
+  // It must not be presented to a played character as narrator direction.
+  const charSection = p.slice(0, p.indexOf('BEFORE YOU ANSWER'));
+  assert.ok(
+    !/Narrator voice/.test(charSection),
+    'character chat still shows manuscript narrator direction',
+  );
+});
+
+test("the author's style direction sits after the speech rules, not buried", () => {
+  const p = characterPromptWithStyle('Keep replies BRIEF.');
+  assert.ok(
+    p.indexOf('STYLE AND TONE DIRECTION') > p.indexOf('HOW TO SPEAK IN THIS CONVERSATION'),
+    'style direction should come after the speech rules it refines',
+  );
 });

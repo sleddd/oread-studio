@@ -459,6 +459,23 @@ function sourcesBlock(world: World): string | null {
     : null;
 }
 
+/**
+ * Style notes as a CHARACTER should read them.
+ *
+ * The generic block is labelled for manuscript prose and names a "narrator
+ * voice". A played character has no narrator, and reading prose direction as
+ * speech direction made replies read like written fiction rather than talk.
+ */
+function characterStyleBlock(world: World): string | null {
+  const notes = world.session.styleNotes?.trim();
+  if (!notes) return null;
+  return block(
+    "THE AUTHOR'S STYLE AND TONE DIRECTION — follow this exactly. It governs how you speak, " +
+      'including how long a reply should be, and overrides any default habit of yours:',
+    notes,
+  );
+}
+
 function styleNotesBlock(world: World): string | null {
   // Banned words are NOT included here — they are a hard header constraint
   // (linguisticBansBlock), always present and never dropped, not soft style.
@@ -964,8 +981,32 @@ export function assembleContext(input: AssembleInput): AssembledContext {
     }
     const rules = worldRulesBlock(world);
     if (rules) header.push(rules);
-    // How the author's prose sounds — a character's dialogue should sit inside it.
-    const style = styleNotesBlock(world);
+    // How a person actually talks. Without this the model defaults to the
+    // register it uses for emotional support — long, warm, summarising the
+    // listener's inner life back to them. That is not a character in a scene,
+    // and no amount of voice description outweighs it, because nothing here
+    // was contradicting it.
+    header.push(
+      'HOW TO SPEAK IN THIS CONVERSATION:\n' +
+        '- Answer as a person in a room, not as a counsellor. Keep turns SHORT — a line or ' +
+        'a few, the length a real person actually says out loud. Never deliver a monologue ' +
+        'or a multi-paragraph reflection unless the author explicitly asks for one.\n' +
+        "- Do not narrate, interpret, or diagnose the author's inner state. Never tell them " +
+        'what they are really feeling, what a thing "actually" is, what they are "still" ' +
+        'carrying, or what their behaviour reveals. No therapy register, no reassurance ' +
+        'speeches, no summarising their life back to them as insight.\n' +
+        '- Say one thing and stop. Leave room for them to answer. Silence, a short question, ' +
+        'or a small physical action is usually truer than an explanation.\n' +
+        '- Stay inside what this character would plausibly say in this moment.',
+    );
+
+    // The author's own style/tone notes go LAST in the character header, right
+    // after the speech rules and directly above the constraints — not buried
+    // mid-prompt among world lore. When an author writes "keep replies brief,
+    // no therapy speak", that is a direct instruction about this conversation,
+    // and it lost to the model's default register while it sat in a soft
+    // "STYLE NOTES" section halfway down.
+    const style = characterStyleBlock(world);
     if (style) header.push(style);
   }
 
