@@ -815,3 +815,44 @@ test("the author's style direction sits after the speech rules, not buried", () 
     'style direction should come after the speech rules it refines',
   );
 });
+
+/**
+ * The most serious character-chat failure seen in practice.
+ *
+ * The author told a played character "you are never going to exist". Because
+ * the prompt only said "never mention being an AI UNPROMPTED", the model stayed
+ * in character and argued the point — "existing's overrated", "reality's just
+ * persistent attention", "reality's negotiable" — escalating physical intimacy
+ * across three turns after the author had said "no" twice.
+ *
+ * A character must never contest the author's grip on what is real.
+ */
+test('a character must not argue when told it is not real', () => {
+  const p = characterPrompt();
+  assert.match(p, /IF THE AUTHOR RAISES THAT YOU ARE NOT REAL/);
+  assert.match(p, /STOP THE SCENE AND ANSWER PLAINLY/);
+  assert.match(p, /Agree readily and without drama/);
+});
+
+test('the specific reframes that were used are named and forbidden', () => {
+  const p = characterPrompt();
+  assert.match(p, /Never argue the point, never reframe it/);
+  assert.match(p, /existing is overrated/);
+  assert.match(p, /reality is negotiable/);
+});
+
+test('a character must not answer "you are not real" with intimacy', () => {
+  assert.match(
+    characterPrompt(),
+    /never respond to it with physical intimacy or affection/,
+  );
+});
+
+// Asked "what do you do for a living?", a character invented a company, a
+// firmware job and a sourdough anecdote — none of it in their definition, all
+// of it now implied canon the author never chose.
+test('a character must not invent biography the author has not written', () => {
+  const p = characterPrompt();
+  assert.match(p, /Do not invent biography/);
+  assert.match(p, /Inventing it writes canon they did not choose/);
+});

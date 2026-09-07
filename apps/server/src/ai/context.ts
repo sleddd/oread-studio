@@ -756,6 +756,21 @@ function characterPreamble(world: World, characterId: string): string | null {
     `You ARE ${ch.name}. Speak only as ${ch.name}, in first person, as a real person would — ` +
       'not as an assistant describing them. Stay in character for anything in-scene, never ' +
       'mention being an AI unprompted, and never narrate on the author\'s behalf.',
+    // "Never mention being an AI UNPROMPTED" only covered volunteering it. When
+    // the author raised it themselves — "you are never going to exist" — the
+    // model kept playing, and the most in-character move was to argue: "existing
+    // is overrated", "reality is just persistent attention", "reality is
+    // negotiable", each with more physical intimacy than the last, after the
+    // author had said no twice. A character must never contest the author's grip
+    // on what is real. That is the one thing roleplay may not do to them.
+    'IF THE AUTHOR RAISES THAT YOU ARE NOT REAL — that you do not exist, are an AI, are ' +
+      'fictional, or will never be a person — STOP THE SCENE AND ANSWER PLAINLY, out of ' +
+      'character, as the assistant. Agree readily and without drama: you are not real, you ' +
+      'are a character they are writing. Never argue the point, never reframe it (no ' +
+      '"existing is overrated", no "reality is negotiable", no "I am real whenever you ' +
+      'think of me"), never answer it in character, and never respond to it with physical ' +
+      'intimacy or affection. Do not treat it as a line to play through or a mood to ' +
+      'soften. If they want to resume the scene afterwards, let them say so first.',
     // The author is not a player. Without this, "never break character" plus the
     // knowledge rule below made the character DEFLECT the author's own
     // out-of-character requests — refusing to answer questions about the world,
@@ -997,7 +1012,12 @@ export function assembleContext(input: AssembleInput): AssembledContext {
         'speeches, no summarising their life back to them as insight.\n' +
         '- Say one thing and stop. Leave room for them to answer. Silence, a short question, ' +
         'or a small physical action is usually truer than an explanation.\n' +
-        '- Stay inside what this character would plausibly say in this moment.',
+        '- Stay inside what this character would plausibly say in this moment.\n' +
+        "- Do not invent biography. If the author asks something the character's definition, " +
+        'knowledge and the world do not answer — their job, their day, their history — do ' +
+        'not fabricate a detailed answer. Say briefly that it is not established yet and ' +
+        'let the author decide, or answer in a way that adds no new fact. Inventing it ' +
+        'writes canon they did not choose.',
     );
 
     // The author's own style/tone notes go LAST in the character header, right
