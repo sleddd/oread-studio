@@ -1,24 +1,23 @@
 import { useRef } from 'react';
 import { useStore } from '../state/store.js';
-import type { WorldDocument } from '@oread/shared';
+import { parseWorldFile, type ParsedWorldFile } from '@oread/shared';
 
 export function WorldPicker({ onClose }: { onClose: () => void }): JSX.Element {
   const store = useStore();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const onImportFile = async (file: File) => {
-    let doc: WorldDocument;
+    let parsed: ParsedWorldFile;
     try {
-      const parsed = JSON.parse(await file.text());
-      // Accept both a bare world doc and one wrapped in { world: ... }.
-      doc = (parsed && parsed.world ? parsed : { world: parsed }) as WorldDocument;
-      if (!doc.world?.identity) throw new Error('missing world.identity');
+      // parseWorldFile takes every shape the app writes, the export envelope
+      // included — see packages/shared/src/world-file.ts.
+      parsed = parseWorldFile(JSON.parse(await file.text()));
     } catch (e) {
       alert(`Could not read that file as a world JSON: ${(e as Error).message}`);
       return;
     }
     try {
-      await store.importWorld(doc);
+      await store.importWorld(parsed);
       onClose();
     } catch (e) {
       alert(`Import failed: ${(e as Error).message}`);

@@ -28,6 +28,8 @@ import type {
   PersistedChatMode,
   CredentialMeta,
   Provider,
+  ChapterStatusDb,
+  ParsedWorldFile,
 } from '@oread/shared';
 import { countWords, appendProse } from '@oread/shared';
 import * as apiWorlds from '../api/index.js';
@@ -127,7 +129,7 @@ export interface StoreApi extends StoreState {
   // world switching (flush autosave first)
   openWorld: (id: string) => Promise<void>;
   newWorld: () => Promise<void>;
-  importWorld: (doc: WorldDocument) => Promise<void>;
+  importWorld: (file: ParsedWorldFile) => Promise<void>;
   saveWorld: () => Promise<void>;
   deleteWorld: (id: string) => Promise<void>;
   deleteManuscript: (mid: string) => Promise<void>;
@@ -343,16 +345,79 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
   }, [autosave, openWorld, refreshWorlds, showToast]);
 
   const importWorld = useCallback(
-    async (doc: WorldDocument) => {
+    async ({ doc, manuscripts }: ParsedWorldFile) => {
       await autosave.flush();
       // Create an empty world (server assigns the row id + seeds a manuscript),
       // then overwrite its document with the imported one and open it.
       const name = doc.world.identity.name || 'Imported World';
+
+      // Export nulls credentialId on purpose (never ship key material), so an
+      // imported world lands with no model and silently answers from the mock —
+      // the "every world is fine but the new one" case. The file still names the
+      // PROVIDER it used, so reattach this user's own credential for that
+      // provider. No secret crosses the file; we only re-point an id that is
+      // already theirs. Ambiguous or absent match is left null for them to pick.
+      const model = doc.world.session?.model;
+      let credentialNote = '';
+      if (model && !model.credentialId) {
+        if (model.provider) {
+          const { credentials } = await apiWorlds.credentials.list();
+          const forProvider = credentials.filter((c) => c.provider === model.provider);
+          if (forProvider.length === 1) {
+            model.credentialId = forProvider[0]!.id;
+          } else {
+            credentialNote =
+              forProvider.length > 1
+                ? ` — pick which ${model.provider} credential to use in World → Session`
+                : ` — set a ${model.provider} credential in World → Session before chatting`;
+          }
+        } else {
+          // No provider recorded either: nothing to match on, so say so rather
+          // than letting the world quietly answer from the mock.
+          credentialNote = ' — set a model credential in World → Session before chatting';
+        }
+      }
+
       const { id } = await apiWorlds.worlds.create(name);
       await apiWorlds.worlds.save(id, doc);
+
+      // An export envelope carries the prose too. Without this the import
+      // silently produced a world whose manuscripts were all empty. Reuse the
+      // manuscript the server seeded for the first one so the import does not
+      // leave a stray "Untitled Manuscript" beside the real work.
+      if (manuscripts.length) {
+        const seeded = (await apiWorlds.manuscripts.list(id)).manuscripts;
+        const ordered = [...manuscripts].sort((a, b) => a.order - b.order);
+        for (const [i, ms] of ordered.entries()) {
+          const format = ms.format as WritingFormat;
+          let mid: string;
+          if (i === 0 && seeded[0]) {
+            mid = seeded[0].id;
+            await apiWorlds.manuscripts.update(mid, { name: ms.name, format, order: ms.order });
+            // Drop the seeded ch_001 so imported chapters are not shadowed by it.
+            for (const c of (await apiWorlds.chapters.list(mid)).chapters) {
+              await apiWorlds.chapters.remove(c.id);
+            }
+          } else {
+            mid = (await apiWorlds.manuscripts.create(id, { name: ms.name, format })).manuscript.id;
+            await apiWorlds.manuscripts.update(mid, { order: ms.order });
+          }
+          for (const ch of [...ms.chapters].sort((a, b) => a.order - b.order)) {
+            const created = await apiWorlds.chapters.createInManuscript(mid, {
+              chapterId: ch.chapterId,
+              content: ch.content,
+              status: ch.status as ChapterStatusDb,
+            });
+            if (created.chapter.order !== ch.order) {
+              await apiWorlds.chapters.updateMeta(created.chapter.id, { order: ch.order });
+            }
+          }
+        }
+      }
+
       await refreshWorlds();
       await openWorld(id);
-      showToast(`Imported “${name}”`);
+      showToast(`Imported “${name}”${credentialNote}`);
     },
     [autosave, openWorld, refreshWorlds, showToast],
   );
@@ -747,6 +812,18 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
           };
         }
         setS((prev) => ({ ...prev, msgs: [...prev.msgs, assistant], thinking: false }));
+        // The server already reported that no credential resolved and it served
+        // canned copy — but nothing ever showed it, so a world with a dangling
+        // credentialId (every IMPORTED world: export nulls it deliberately) just
+        // looked like a model answering badly, the same two lines forever. Say it
+        // plainly, once, and name the fix.
+        if (done.usedMock) {
+          showError(
+            'No model credential is set for this world — these replies are canned placeholders. ' +
+              'Open World → Session → Model & sampling, choose a Credential and Model, then Save. ' +
+              '(Imported worlds never carry a credential: the export strips it on purpose.)',
+          );
+        }
       } catch (e) {
         setS((prev) => ({ ...prev, thinking: false }));
         // Sticky: provider failures explain what to fix (model access, region,
